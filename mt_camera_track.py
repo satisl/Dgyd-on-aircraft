@@ -183,7 +183,7 @@ def track(queues, queue_, worker_num, timeout, lock):
                 frame, bbox = queues[i].get(timeout=timeout)
                 # 对目标靶子画框
                 if bbox is not None:
-                    tracker = cv2.legacy.TrackerKCF.create()
+                    tracker = cv2.legacy.TrackerCSRT.create()
                     tracker.init(frame, (bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1]))
                     frame = plot(target_num, bbox, frame)
 
@@ -231,9 +231,9 @@ if __name__ == '__main__':
     coefficient3 = 0.005
     imgsz1 = 640
     imgsz2 = 96
-    target_num = '60'
-    # cap_path = 0
-    cap_path = r'E:\desktop\456_test\20231001_125958.mp4'
+    target_num = '26'
+    cap_path = 0
+    # cap_path = r'E:\desktop\456_test\20231001_125958.mp4'
     frequence = 250
     worker_num = 8
     timeout = 10
@@ -275,7 +275,9 @@ if __name__ == '__main__':
 
     show_flag = True
     while show_flag:
+        lock.acquire()
         print('show', show_queue.qsize())
+        lock.release()
         try:
             frame = show_queue.get(timeout=10)
         except queue.Empty:
