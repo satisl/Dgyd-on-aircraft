@@ -7,8 +7,8 @@ import cv2
 import threading
 import queue
 
-model_456_path = r'D:\yolov8\yolov8\456_300dataset_imgsz640_v8n_SGD\weights\best.engine'
-model_789_path = r'D:\yolov8\yolov8\789_800dataset_imgsz96_v8n_SGD\weights\best.engine'
+model_456_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\456_300dataset_imgsz640_v8n_SGD\weights\best.engine'
+model_789_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\789_800dataset_imgsz96_v8n_SGD\weights\best.engine'
 coefficient1 = 2.5
 coefficient2 = 2 * 0.5
 coefficient3 = 0.005
@@ -40,14 +40,13 @@ def from_456_to_789(locaters, digits, image):
     xywhs = []
     for i in digits:
         x1, y1, w1, h1 = i
-        xywhs.append(i)
 
         for j in locaters:
             x2, y2 = j[:2]
 
             if math.dist((x1, y1), (x2, y2)) < min(w1, h1) * coefficient1:
                 # 截取靶子
-
+                xywhs.append(i)
                 w1 *= coefficient2
                 h1 *= coefficient2
 
@@ -79,9 +78,10 @@ def from_456_to_789(locaters, digits, image):
     return rotated_imgs, xywhs
 
 
-def detect_789(model_789, rotated_imgs):
+def detect_789(model_789, rotated_imgs, xywhs):
     double_digits = []
-    for rotated_img in rotated_imgs:
+    xywhs_ = []
+    for rotated_img, i in zip(rotated_imgs, xywhs):
         # 检测旋转后靶子，具体获取双位数数值
         results = model_789.predict(source=rotated_img, imgsz=imgsz2, half=True,
                                     save=False, conf=0.5, verbose=False)
@@ -96,7 +96,8 @@ def detect_789(model_789, rotated_imgs):
             else:
                 double_digit = str(int(cls[1])) + str(int(cls[0]))
             double_digits.append(double_digit)
-    return double_digits
+            xywhs_.append(i)
+    return double_digits, xywhs_
 
 
 def plot(double_digits, xywhs, image):
@@ -176,7 +177,7 @@ def main(model_456, model_789, input_frame_queue, output_frame_queue, frequence,
             rotated_imgs, xywhs = from_456_to_789(locaters, digits, frame)
 
             # 4 识别旋转后图片上两单位数的数值，并合并为双位数数值
-            double_digits = detect_789(model_789, rotated_imgs)
+            double_digits, xywhs = detect_789(model_789, rotated_imgs, xywhs)
 
             # 5 根据双位数位置以及数值画框并标记数值
             bounded_image = plot(double_digits, xywhs, frame)
@@ -215,10 +216,10 @@ def camera(input_queues, cap_path, frequence, worker_num, lock):
                 num = 0
                 for j in range(worker_num):
                     num += input_queues[j].qsize()
-                lock.acquire()
-                # print(f'camera:{i}', input_queues[i].qsize())
-                print('camera_total', num)
-                lock.release()
+                # lock.acquire()
+                # # print(f'camera:{i}', input_queues[i].qsize())
+                # print('camera_total', num)
+                # lock.release()
             else:
                 cap.release()
                 break
@@ -238,9 +239,9 @@ def save(save_frame_queue, cap_path, frequence, lock):
                           (width + height // 4, height))
     global save_flag
     while save_flag:
-        lock.acquire()
-        print('save', save_frame_queue.qsize())
-        lock.release()
+        # lock.acquire()
+        # print('save', save_frame_queue.qsize())
+        # lock.release()
 
         time.sleep(1 / frequence)
         if save_frame_queue.qsize() > 0:
@@ -251,7 +252,7 @@ if __name__ == '__main__':
     cap_path = 0
     # cap_path = r'E:\desktop\456_test\20231001_125958.mp4'
     frequence = 250
-    worker_num = 8
+    worker_num = 1
 
     # 视频流队列
     input_queues = [queue.Queue(maxsize=50) for i in range(worker_num)]
@@ -295,10 +296,10 @@ if __name__ == '__main__':
             num = 0
             for j in range(worker_num):
                 num += show_queues[j].qsize()
-            lock.acquire()
-            # print(f'show:{i}', show_queues[i].qsize())
-            print('show_total', num)
-            lock.release()
+            # lock.acquire()
+            # # print(f'show:{i}', show_queues[i].qsize())
+            # print('show_total', num)
+            # lock.release()
 
             try:
                 frame = show_queues[i].get(timeout=10)
@@ -308,7 +309,7 @@ if __name__ == '__main__':
             frames_num += 1
             frame = update_fps(frame, fps)  # 附上fps
             cv2.imshow('0', frame)
-            save_frame_queue.put(frame) # 添加至视频保存队列
+            save_frame_queue.put(frame)  # 添加至视频保存队列
 
             # fps计算
             if frames_num > 60:
