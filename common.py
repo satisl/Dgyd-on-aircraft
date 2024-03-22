@@ -1,4 +1,5 @@
 import cv2
+import time
 
 
 def detect_456(imgsz, model_456, img):
@@ -46,3 +47,21 @@ def update_fps(img, fps, font=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1, font_thick
     # 左上角显示FPS
     cv2.putText(img, f'FPS:{fps:.2f}', (10, 30), font, font_scale, (0, 0, 255), font_thickness)
     return img
+
+def camera(queues, cap, frequence, worker_num, lock):
+    time.sleep(1 / frequence)
+    for i in range(worker_num):
+        success, frame = cap.read()
+        if success:
+            queues[i].put(frame)
+
+        else:
+            cap.release()
+            break
+    num = 0
+    for j in range(worker_num):
+        num += queues[j].qsize()
+    lock.acquire()
+    print('detect_total', num)
+    lock.release()
+

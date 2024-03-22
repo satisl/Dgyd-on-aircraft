@@ -6,6 +6,7 @@ import numpy as np
 import cv2
 import threading
 import queue
+import common
 from common import detect_456, detect_789, update_fps
 
 
@@ -73,21 +74,7 @@ def camera(queues, cap_path, frequence, worker_num, lock):
     cap = cv2.VideoCapture(cap_path)
     global flag
     while cap.isOpened() and flag:
-        time.sleep(1 / frequence)
-        for i in range(worker_num):
-            success, frame = cap.read()
-            if success:
-                queues[i].put(frame)
-
-            else:
-                cap.release()
-                break
-        num = 0
-        for j in range(worker_num):
-            num += queues[j].qsize()
-        lock.acquire()
-        print('detect_total', num)
-        lock.release()
+        common.camera(queues, cap, frequence, worker_num, lock)
 
 
 def detect(imgsz1, imgsz2, model_456, model_789, queue1, queue2, timeout):

@@ -6,6 +6,7 @@ import numpy as np
 import cv2
 import threading
 import queue
+import common
 from common import detect_456, detect_789, update_fps
 
 model_456_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\456_300dataset_imgsz640_v8n_SGD\weights\best.engine'
@@ -124,33 +125,17 @@ def camera(queues, cap_path, frequence, worker_num, lock):
     cap = cv2.VideoCapture(cap_path)
     global flag
     while cap.isOpened() and flag:
-        time.sleep(1 / frequence)
-        for i in range(worker_num):
-            success, frame = cap.read()
-            if success:
-                queues[i].put(frame)
-
-            else:
-                cap.release()
-                break
-        num = 0
-        for j in range(worker_num):
-            num += queues[j].qsize()
-        lock.acquire()
-        print('detect_total', num)
-        lock.release()
+        common.camera(queues, cap, frequence, worker_num, lock)
 
 
-def main(imgsz1, imgsz2, model_456, model_789, input_frame_queue, output_frame_queue, frequence, lock):
+def main(imgsz1, imgsz2, model_456, model_789, queue1, queue2, lock, timeout):
     image_for_concat = None
     image_for_concat_update_before = cv2.getTickCount()
 
     global flag
     while flag:
-        time.sleep(1 / frequence)
-        if input_frame_queue.qsize() > 0:
-
-            frame = input_frame_queue.get()
+        try:
+            frame = queue1.get(timeout=timeout)
             detected_digits_ = [[str(idx), i] for idx, i in enumerate(detected_digits)]
             height, width = frame.shape[:2]
             # 识别靶子中三角位置与双位数位置
@@ -184,7 +169,7 @@ def main(imgsz1, imgsz2, model_456, model_789, input_frame_queue, output_frame_q
                             image_for_concat,
                             image_for_concat_update_before)
             # 检测后图片添加至队列
-            output_frame_queue.put(concatenated_image)
+            queue2.put(concatenated_image)
 
             # 双位数检测次数计数
             if len(double_digits) != 0:
@@ -193,6 +178,8 @@ def main(imgsz1, imgsz2, model_456, model_789, input_frame_queue, output_frame_q
                     idx = int(double_digit)
                     detected_digits[idx] += 1
                 lock.release()
+        except queue.Empty:
+            break
 
 
 def save(save_frame_queue, cap_path, frequence, lock):
@@ -218,6 +205,7 @@ if __name__ == '__main__':
     # cap_path = r'E:\desktop\456_test\20231001_125535.mp4'
     frequence = 250
     worker_num = 10
+    timeout = 10
 
     # 视频流队列
     input_queues = [queue.Queue(maxsize=50) for i in range(worker_num)]
@@ -236,8 +224,8 @@ if __name__ == '__main__':
               for i in range(worker_num)]
     tasks = [threading.Thread(target=main,
                               args=(
-                                  imgsz1, imgsz2, i[0], i[1], input_queues[idx], show_queues[idx],
-                                  frequence / worker_num, lock
+                                  imgsz1, imgsz2, i[0], i[1], input_queues[idx], show_queues[idx], lock,
+                                  timeout
                               ))
              for idx, i in enumerate(models)]
     for i in tasks:
@@ -267,7 +255,7 @@ if __name__ == '__main__':
             lock.release()
 
             try:
-                frame = show_queues[i].get(timeout=10)
+                frame = show_queues[i].get(timeout=timeout)
             except queue.Empty:
                 show_flag = False
                 break
