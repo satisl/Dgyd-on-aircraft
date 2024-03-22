@@ -252,7 +252,7 @@ if __name__ == '__main__':
     cap_path = 0
     # cap_path = r'E:\desktop\456_test\20231001_125958.mp4'
     frequence = 250
-    worker_num = 1
+    worker_num = 10
 
     # 视频流队列
     input_queues = [queue.Queue(maxsize=50) for i in range(worker_num)]
