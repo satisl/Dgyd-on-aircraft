@@ -4,8 +4,8 @@ import math
 import numpy as np
 import cv2
 
-model_456 = YOLO(r'D:\yolov8\yolov8\456_300dataset_imgsz640_v8n_SGD\weights\best.engine', task='detect')
-model_789 = YOLO(r'D:\yolov8\yolov8\789_800dataset_imgsz96_v8n_SGD\weights\best.engine', task='detect')
+model_456 = YOLO(r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\456_300dataset_imgsz640_v8n_SGD\weights\best.engine', task='detect')
+model_789 = YOLO(r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\789_800dataset_imgsz96_v8n_SGD\weights\best.engine', task='detect')
 coefficient1 = 2.5
 coefficient2 = 2 * 0.5
 coefficient3 = 0.005
@@ -254,7 +254,6 @@ def main():
     # for idx, i in enumerate(ut):
     #     print(idx + 1, i / len(variant.times) / cv2.getTickFrequency())
     # print(1 / (ut[-1] / len(variant.times) / cv2.getTickFrequency()))
-    return variant.detected_digits
 
 
 def update_fps(img, fps, font=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1, font_thickness=2):
@@ -263,83 +262,5 @@ def update_fps(img, fps, font=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1, font_thick
     return img
 
 
-def main1(taraget_num):
-    variant = Variant()
-
-    variant.width, variant.height = int(cap.get(3)), int(cap.get(4))
-    fourcc = cv2.VideoWriter.fourcc(*'XVID')
-    out = cv2.VideoWriter(f'output/{cv2.getTickCount()}.avi', fourcc, 100.0,
-                          (variant.width, variant.height))
-    cv2.namedWindow('double_digits_detection', cv2.WINDOW_AUTOSIZE)
-    tracker = None
-
-    while cap.isOpened():
-        # tick1 = cv2.getTickCount()
-        # 1 读取摄像头画面
-        success, frame = cap.read()
-        if success:
-            # print((cv2.getTickCount() - tick1) / cv2.getTickFrequency())
-            # variant.time.append(cv2.getTickCount())
-            # 2 识别靶子中三角位置与双位数位置
-            locaters, digits = detect_456(frame)
-
-            # variant.time.append(cv2.getTickCount())
-            # 3 截取靶子中双位数图片，并根据靶子中三角位置与双位数位置计算旋转角度，旋转截取图片，获取旋转后图片以及对应双位数位置
-            rotated_imgs, xywhs = from_456_to_789(locaters, digits, frame)
-
-            # variant.time.append(cv2.getTickCount())
-            # 4 识别旋转后图片上两单位数的数值，并合并为双位数数值
-            double_digits = detect_789(rotated_imgs)
-
-            # variant.time.append(cv2.getTickCount())
-            # 5 根据双位数位置以及数值画框并标记数值
-            flag = True
-            for i, (x, y, w, h) in zip(double_digits, xywhs):
-                if i == taraget_num:
-                    tracker = cv2.legacy.TrackerKCF.create()
-                    tracker.init(frame, (x - w * 2, y - h * 2, 4 * w, 4 * h))
-                    flag = False
-            if flag and tracker is not None:
-                success, bbox = tracker.update(frame)
-                print(success)
-                if success:
-                    x, y, w, h = [int(v) for v in bbox]
-                    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-            else:
-                frame = plot(double_digits, xywhs, frame)
-
-            frame = update_fps(frame, variant.fps)
-
-            # variant.time.append(cv2.getTickCount())
-            # 8 检测后图片显示并保存到视频
-            cv2.imshow('double_digits_detection', frame)
-            out.write(frame)
-
-            # variant.time.append(cv2.getTickCount())
-            # 9 双位数检测次数计数andFPS计算
-            variant.frames_num += 1
-            if variant.frames_num > 60:
-                variant.fps = variant.frames_num * cv2.getTickFrequency() / (
-                        cv2.getTickCount() - variant.fps_update_before)
-                variant.frames_num = 0
-                variant.fps_update_before = cv2.getTickCount()
-
-            # variant.time.append(cv2.getTickCount())
-            # variant.times.append(variant.time)
-            # variant.time = []
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-        else:
-            break
-
-    cap.release()
-    out.release()
-    cv2.destroyAllWindows()
-
-
 if __name__ == '__main__':
-    detected_digits = sorted(main(), key=lambda i: i[1], reverse=True)
-    print(detected_digits)
-    target_num = sorted(detected_digits[:3], key=lambda i: int(i[0]))[1][0]
-    print(target_num)
-    main1(target_num)
+    main()

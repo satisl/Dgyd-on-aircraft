@@ -6,6 +6,7 @@ import numpy as np
 import cv2
 import threading
 import queue
+from common import detect_456, detect_789, update_fps
 
 model_456_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\456_300dataset_imgsz640_v8n_SGD\weights\best.engine'
 model_789_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\789_800dataset_imgsz96_v8n_SGD\weights\best.engine'
@@ -16,37 +17,20 @@ imgsz1 = 640
 imgsz2 = 96
 
 
-def detect_456(model_456, img):
-    results_456 = model_456.predict(source=img, imgsz=imgsz1, half=True,
-                                    save=False, conf=0.5, verbose=False)
-    r = results_456[0]
-    # 获取图片检测相关信息
-    xywh = r.boxes.xywh.tolist()
-    cls = r.boxes.cls.tolist()
-
-    digits = []
-    locaters = []
-    for i, j in zip(cls, xywh):
-        if i == 0:
-            locaters.append(j)
-        else:
-            digits.append(j)
-
-    return locaters, digits
-
-
 def from_456_to_789(locaters, digits, image):
     rotated_imgs = []
     xywhs = []
+    xywhs_ = []
     for i in digits:
         x1, y1, w1, h1 = i
 
         for j in locaters:
-            x2, y2 = j[:2]
+            x2, y2, w2, h2 = j
 
             if math.dist((x1, y1), (x2, y2)) < min(w1, h1) * coefficient1:
                 # 截取靶子
                 xywhs.append(i)
+                xywhs_.append(j)
                 w1 *= coefficient2
                 h1 *= coefficient2
 
@@ -75,29 +59,7 @@ def from_456_to_789(locaters, digits, image):
                                              flags=cv2.INTER_LANCZOS4)
                 rotated_imgs.append(rotated_img)
 
-    return rotated_imgs, xywhs
-
-
-def detect_789(model_789, rotated_imgs, xywhs):
-    double_digits = []
-    xywhs_ = []
-    for rotated_img, i in zip(rotated_imgs, xywhs):
-        # 检测旋转后靶子，具体获取双位数数值
-        results = model_789.predict(source=rotated_img, imgsz=imgsz2, half=True,
-                                    save=False, conf=0.5, verbose=False)
-
-        r = results[0]
-        xywh = r.boxes.xywh.tolist()
-        cls = r.boxes.cls.tolist()
-
-        if len(xywh) == 2:
-            if xywh[0][0] < xywh[1][0]:
-                double_digit = str(int(cls[0])) + str(int(cls[1]))
-            else:
-                double_digit = str(int(cls[1])) + str(int(cls[0]))
-            double_digits.append(double_digit)
-            xywhs_.append(i)
-    return double_digits, xywhs_
+    return rotated_imgs, xywhs, xywhs_
 
 
 def plot(double_digits, xywhs, image):
@@ -158,7 +120,28 @@ def concatenate(img, rotated_imgs, height, image_for_concat, image_for_concat_up
     return concatenated_image, image_for_concat, image_for_concat_update_before
 
 
-def main(model_456, model_789, input_frame_queue, output_frame_queue, frequence, lock):
+def camera(queues, cap_path, frequence, worker_num, lock):
+    cap = cv2.VideoCapture(cap_path)
+    global flag
+    while cap.isOpened() and flag:
+        time.sleep(1 / frequence)
+        for i in range(worker_num):
+            success, frame = cap.read()
+            if success:
+                queues[i].put(frame)
+
+            else:
+                cap.release()
+                break
+        num = 0
+        for j in range(worker_num):
+            num += queues[j].qsize()
+        lock.acquire()
+        print('detect_total', num)
+        lock.release()
+
+
+def main(imgsz1, imgsz2, model_456, model_789, input_frame_queue, output_frame_queue, frequence, lock):
     image_for_concat = None
     image_for_concat_update_before = cv2.getTickCount()
 
@@ -170,65 +153,46 @@ def main(model_456, model_789, input_frame_queue, output_frame_queue, frequence,
             frame = input_frame_queue.get()
             detected_digits_ = [[str(idx), i] for idx, i in enumerate(detected_digits)]
             height, width = frame.shape[:2]
-            # 2 识别靶子中三角位置与双位数位置
-            locaters, digits = detect_456(model_456, frame)
+            # 识别靶子中三角位置与双位数位置
+            locaters, digits = detect_456(imgsz1, model_456, frame)
 
-            # 3 截取靶子中双位数图片，并根据靶子中三角位置与双位数位置计算旋转角度，旋转截取图片，获取旋转后图片以及对应双位数位置
-            rotated_imgs, xywhs = from_456_to_789(locaters, digits, frame)
+            # 截取靶子中双位数图片，并根据靶子中三角位置与双位数位置计算旋转角度，旋转截取图片，获取旋转后图片以及对应双位数位置
+            rotated_imgs, xywhs, xywhs_ = from_456_to_789(locaters, digits, frame)
 
-            # 4 识别旋转后图片上两单位数的数值，并合并为双位数数值
-            double_digits, xywhs = detect_789(model_789, rotated_imgs, xywhs)
+            # 识别旋转后图片上两单位数的数值，并合并为双位数数值
+            double_digits, xywhs = detect_789(imgsz2, model_789, rotated_imgs, xywhs)
 
-            # 5 根据双位数位置以及数值画框并标记数值
+            # 对双位数和三角画框(第一模型检测结果),对靶子整体画框（算法配对结果），debug用
+            # frame = plot(['locater' for i in range(len(locaters))], locaters, frame)
+            # frame = plot(['digit' for i in range(len(digits))], digits, frame)
+            # xyxys = [(min(x1 - w1, x2 - w2), min(y1 - h1, y2 - h2), max(x1 + w1, x2 + w2), max((y1 + h1, y2 + h2))) for
+            #          (x1, y1, w1, h1), (x2, y2, w2, h2) in zip(xywhs, xywhs_)]
+            # for x1, y1, x2, y2 in xyxys:
+            #     cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+
+            # 根据双位数位置以及数值画框并标记数值
             bounded_image = plot(double_digits, xywhs, frame)
 
-            # 6 附上双位数检测次数及最终中位数
+            # 附上双位数检测次数及最终中位数
 
             texted_image = text(bounded_image, width, detected_digits_)
 
-            # 7 贴上双位数图片预览图
+            # 贴上双位数图片预览图
             concatenated_image, image_for_concat, image_for_concat_update_before = \
                 concatenate(texted_image,
                             rotated_imgs, height,
                             image_for_concat,
                             image_for_concat_update_before)
-            # # 8 检测后图片添加至队列
+            # 检测后图片添加至队列
             output_frame_queue.put(concatenated_image)
 
-            # 9 双位数检测次数计数
+            # 双位数检测次数计数
             if len(double_digits) != 0:
                 lock.acquire()
                 for double_digit in double_digits:
                     idx = int(double_digit)
                     detected_digits[idx] += 1
                 lock.release()
-
-
-def camera(input_queues, cap_path, frequence, worker_num, lock):
-    cap = cv2.VideoCapture(cap_path)
-    global flag
-    while cap.isOpened() and flag:
-        time.sleep(1 / frequence)
-        for i in range(worker_num):
-            success, frame = cap.read()
-            if success:
-                input_queues[i].put(frame)
-                num = 0
-                for j in range(worker_num):
-                    num += input_queues[j].qsize()
-                # lock.acquire()
-                # # print(f'camera:{i}', input_queues[i].qsize())
-                # print('camera_total', num)
-                # lock.release()
-            else:
-                cap.release()
-                break
-
-
-def update_fps(img, fps, font=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1, font_thickness=2):
-    # 左上角显示FPS
-    cv2.putText(img, f'FPS:{fps:.2f}', (10, 30), font, font_scale, (0, 0, 255), font_thickness)
-    return img
 
 
 def save(save_frame_queue, cap_path, frequence, lock):
@@ -239,18 +203,19 @@ def save(save_frame_queue, cap_path, frequence, lock):
                           (width + height // 4, height))
     global save_flag
     while save_flag:
-        # lock.acquire()
-        # print('save', save_frame_queue.qsize())
-        # lock.release()
+        lock.acquire()
+        print('save', save_frame_queue.qsize())
+        lock.release()
 
         time.sleep(1 / frequence)
         if save_frame_queue.qsize() > 0:
             out.write(save_frame_queue.get())
+    out.release()
 
 
 if __name__ == '__main__':
     cap_path = 0
-    # cap_path = r'E:\desktop\456_test\20231001_125958.mp4'
+    # cap_path = r'E:\desktop\456_test\20231001_125535.mp4'
     frequence = 250
     worker_num = 10
 
@@ -271,7 +236,7 @@ if __name__ == '__main__':
               for i in range(worker_num)]
     tasks = [threading.Thread(target=main,
                               args=(
-                                  i[0], i[1], input_queues[idx], show_queues[idx],
+                                  imgsz1, imgsz2, i[0], i[1], input_queues[idx], show_queues[idx],
                                   frequence / worker_num, lock
                               ))
              for idx, i in enumerate(models)]
@@ -296,10 +261,10 @@ if __name__ == '__main__':
             num = 0
             for j in range(worker_num):
                 num += show_queues[j].qsize()
-            # lock.acquire()
-            # # print(f'show:{i}', show_queues[i].qsize())
-            # print('show_total', num)
-            # lock.release()
+            lock.acquire()
+            # print(f'show:{i}', show_queues[i].qsize())
+            print('show_total', num)
+            lock.release()
 
             try:
                 frame = show_queues[i].get(timeout=10)

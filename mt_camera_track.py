@@ -6,25 +6,7 @@ import numpy as np
 import cv2
 import threading
 import queue
-
-
-def detect_456(model_456, img):
-    results_456 = model_456.predict(source=img, imgsz=imgsz1, half=True,
-                                    save=False, conf=0.5, verbose=False)
-    r = results_456[0]
-    # 获取图片检测相关信息
-    xywh = r.boxes.xywh.tolist()
-    cls = r.boxes.cls.tolist()
-
-    digits = []
-    locaters = []
-    for i, j in zip(cls, xywh):
-        if i == 0:
-            locaters.append(j)
-        else:
-            digits.append(j)
-
-    return locaters, digits
+from common import detect_456, detect_789, update_fps
 
 
 def from_456_to_789(locaters, digits, image):
@@ -78,28 +60,6 @@ def from_456_to_789(locaters, digits, image):
     return rotated_imgs, xyxys
 
 
-def detect_789(model_789, rotated_imgs, xywhs):
-    double_digits = []
-    xywhs_ = []
-    for rotated_img, i in zip(rotated_imgs, xywhs):
-        # 检测旋转后靶子，具体获取双位数数值
-        results = model_789.predict(source=rotated_img, imgsz=imgsz2, half=True,
-                                    save=False, conf=0.5, verbose=False)
-
-        r = results[0]
-        xywh = r.boxes.xywh.tolist()
-        cls = r.boxes.cls.tolist()
-
-        if len(xywh) == 2:
-            if xywh[0][0] < xywh[1][0]:
-                double_digit = str(int(cls[0])) + str(int(cls[1]))
-            else:
-                double_digit = str(int(cls[1])) + str(int(cls[0]))
-            double_digits.append(double_digit)
-            xywhs_.append(i)
-    return double_digits, xywhs_
-
-
 def plot(dg, xyxy, image):
     # 在原图片上绘制框并标上具体双位数数值
     h, w = image.shape[:2]
@@ -107,12 +67,6 @@ def plot(dg, xyxy, image):
     annotator.box_label(xyxy, label=f'{dg}:{int(xyxy[2] - xyxy[0])}*{int(xyxy[3] - xyxy[1])}')
 
     return annotator.im
-
-
-def update_fps(img, fps, font=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1, font_thickness=2):
-    # 左上角显示FPS
-    cv2.putText(img, f'FPS:{fps:.2f}', (10, 30), font, font_scale, (0, 0, 255), font_thickness)
-    return img
 
 
 def camera(queues, cap_path, frequence, worker_num, lock):
@@ -136,20 +90,20 @@ def camera(queues, cap_path, frequence, worker_num, lock):
         lock.release()
 
 
-def detect(model_456, model_789, queue1, queue2, timeout):
+def detect(imgsz1, imgsz2, model_456, model_789, queue1, queue2, timeout):
     global flag
     while flag:
         try:
             frame = queue1.get(timeout=timeout)
 
             # 1 识别靶子中三角位置与双位数位置
-            locaters, digits = detect_456(model_456, frame)
+            locaters, digits = detect_456(imgsz1, model_456, frame)
 
             # 2 截取靶子中双位数图片，并根据靶子中三角位置与双位数位置计算旋转角度，旋转截取图片，获取旋转后图片以及对应双位数位置
             rotated_imgs, xyxys = from_456_to_789(locaters, digits, frame)
 
             # 3 识别旋转后图片上两单位数的数值，并合并为双位数数值
-            double_digits, xyxys = detect_789(model_789, rotated_imgs, xyxys)
+            double_digits, xyxys = detect_789(imgsz2, model_789, rotated_imgs, xyxys)
 
             # 4 检测后图片添加至队列
             target_bbox = None
@@ -214,10 +168,11 @@ def save(queue, cap_path, frequence, lock):
                           (width, height))
     global save_flag
     while save_flag:
-        time.sleep(1 / frequence)
         lock.acquire()
         print('save', queue.qsize())
         lock.release()
+
+        time.sleep(1 / frequence)
         if queue.qsize() > 0:
             out.write(queue.get())
     out.release()
@@ -231,7 +186,7 @@ if __name__ == '__main__':
     coefficient3 = 0.005
     imgsz1 = 640
     imgsz2 = 96
-    target_num = '26'
+    target_num = '96'
     cap_path = 0
     # cap_path = r'E:\desktop\456_test\20231001_125958.mp4'
     frequence = 250
@@ -255,7 +210,8 @@ if __name__ == '__main__':
               for i in range(worker_num)]
     tasks = [threading.Thread(target=detect,
                               args=(
-                                  i[0], i[1], detect_queues[idx], track_queues[idx], timeout
+                                  imgsz1, imgsz2, i[0], i[1], detect_queues[idx], track_queues[idx],
+                                  timeout
                               ))
              for idx, i in enumerate(models)]
     for i in tasks:
