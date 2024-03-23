@@ -3,9 +3,6 @@ import time
 import numpy as np
 
 
-
-
-
 def text(img, width, detected_digits, font=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1, font_thickness=2):
     # 右上角显示已检测双位数次数
     dgs = sorted(detected_digits, reverse=True, key=lambda i: i[1])
