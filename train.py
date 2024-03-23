@@ -5,8 +5,6 @@ from PIL import Image
 
 project_name = 'yolov8'
 dataset_name = '456.yaml'
-height = 1500
-width = 2250
 imgsz = 480
 optimizer = 'Adam'
 model_name = f'456_300dataset_imgsz{imgsz}_v8n_{optimizer}'
@@ -31,7 +29,7 @@ if __name__ == '__main__':
     del model
     time.sleep(60)
 
-    # test
+    # 用训练保存的各个epoch的模型val一遍test集
 
     ckpt = os.listdir(f'{project_name}/{model_name}/weights')
 
@@ -40,7 +38,11 @@ if __name__ == '__main__':
     ckpt.sort(key=lambda x: int(x[5:][:-3]))
     ckpt.extend(['last.pt', 'best.pt'])
 
+    # ，再合并合并后的各个图
+
     metrics = ['F1_curve.png', 'P_curve.png', 'PR_curve.png', 'R_curve.png']
+    height = 1500
+    width = 2250
 
     for id1, i in enumerate(ckpt):
 
@@ -52,6 +54,7 @@ if __name__ == '__main__':
 
         image = Image.new("RGB", (len(metrics) * width, height), "white")
 
+        # 合并各个epoch模型val出来的F1_curve,P_curve,PR_curve,R_curve图
         for id2, j in enumerate(metrics):
             image.paste(Image.open(f'{os.getcwd()}/runs/detect/{model_name}--{i[:-3]}/{j}'), (id2 * width, 0))
 
@@ -63,3 +66,15 @@ if __name__ == '__main__':
         image.paste(Image.open(f'{os.getcwd()}/{project_name}/{model_name}/{i[:-3]}_test.png'), (0, idx * height))
 
     image.save(f'{project_name}/{model_name}/total_test.png')
+
+    height = 2250
+    width = 3000
+    image = Image.new("RGB", (2 * width, len(ckpt) * height), "white")
+    # 合并各个epoch模型val出来的confusion_matrix
+    for idx, i in enumerate(ckpt):
+        img = Image.new("RGB", (2 * width, height), "white")
+        img.paste(Image.open(f'{os.getcwd()}/runs/detect/{model_name}--{i[:-3]}/confusion_matrix.png'), (0, 0))
+        img.paste(Image.open(f'{os.getcwd()}/runs/detect/{model_name}--{i[:-3]}/confusion_matrix_normalized.png'),
+                  (width, 0))
+        image.paste(img, (0, idx * height))
+    image.save(f'{project_name}/{model_name}/total_confusion_matrix.png')
