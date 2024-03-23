@@ -1,21 +1,39 @@
 import time
 from ultralytics import YOLO
-from ultralytics.utils.plotting import Annotator
 import math
 import numpy as np
 import cv2
 import threading
+from ultralytics.utils.plotting import Annotator
 import queue
 import common
-from common import detect_456, detect_789, update_fps
+from common import detect_456, detect_789, update_fps, text, concatenate
 
 model_456_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\456_300dataset_imgsz640_v8n_SGD\weights\best.engine'
 model_789_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\789_800dataset_imgsz96_v8n_SGD\weights\best.engine'
 coefficient1 = 2.5
 coefficient2 = 2 * 0.5
-coefficient3 = 0.005
 imgsz1 = 640
 imgsz2 = 96
+conf = 0.5
+iou = 0.5
+cap_path = 0
+# cap_path = r'E:\desktop\456_test\20231001_125535.mp4'
+frequence = 250
+worker_num = 10
+timeout = 10
+
+
+def plot(double_digits, xywhs, image, coefficient=0.005):
+    # 在原图片上绘制框并标上具体双位数数值
+    h, w = image.shape[:2]
+    annotator = Annotator(image, line_width=int(min(w, h) * coefficient))
+    for dg, xywh in zip(double_digits, xywhs):
+        x, y, w, h = xywh
+        xyxy = [x - w / 2, y - h / 2, x + w / 2, y + w / 2]
+        annotator.box_label(xyxy, label=f'{dg}:{int(w)}*{int(h)}')
+
+    return annotator.im
 
 
 def from_456_to_789(locaters, digits, image):
@@ -63,64 +81,6 @@ def from_456_to_789(locaters, digits, image):
     return rotated_imgs, xywhs, xywhs_
 
 
-def plot(double_digits, xywhs, image):
-    # 在原图片上绘制框并标上具体双位数数值
-    h, w = image.shape[:2]
-    annotator = Annotator(image, line_width=int(min(w, h) * coefficient3))
-    for dg, xywh in zip(double_digits, xywhs):
-        x, y, w, h = xywh
-        xyxy = [x - w / 2, y - h / 2, x + w / 2, y + w / 2]
-        annotator.box_label(xyxy, label=f'{dg}:{int(w)}*{int(h)}')
-
-    return annotator.im
-
-
-def text(img, width, detected_digits, font=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1, font_thickness=2):
-    # 右上角显示已检测双位数次数
-    dgs = sorted(detected_digits, reverse=True, key=lambda i: i[1])
-    for i, j in enumerate(dgs[:4]):
-        dg_text = f'{j[0]}:{j[1]}'
-        dg_text_width, dg_text_height = cv2.getTextSize(dg_text, font, font_scale, font_thickness)[0]
-        dg_text_x, dg_text_y = int(width - dg_text_width), int((i + 1) * dg_text_height * 2)
-        cv2.putText(img, dg_text, (dg_text_x, dg_text_y), font,
-                    font_scale,
-                    (0, 0, 255),
-                    font_thickness)
-
-    # 右上角显示已检测三个双位数的中位数
-    dg_text = sorted(dgs[:3], key=lambda i: int(i[0]))[1][0]
-    dg_text_width, dg_text_height = cv2.getTextSize(dg_text, font, font_scale, font_thickness)[0]
-    dg_text_x, dg_text_y = int(width - dg_text_width), int(5 * dg_text_height * 2)
-    cv2.putText(img, dg_text, (dg_text_x, dg_text_y), font,
-                font_scale,
-                (0, 255, 0),
-                font_thickness)
-
-    return img
-
-
-def concatenate(img, rotated_imgs, height, image_for_concat, image_for_concat_update_before):
-    channel = img.shape[2]
-    if image_for_concat is None:
-        image_for_concat = np.zeros((height, height // 4, channel), np.uint8)
-    else:
-        if (cv2.getTickCount() - image_for_concat_update_before) \
-                / cv2.getTickFrequency() > 1:
-            resized_imgs = [cv2.resize(i, (height // 4, height // 4)) for i in rotated_imgs[:4]]
-            if len(resized_imgs) != 0:
-                image = resized_imgs[0]
-                for i in range(4):
-                    if i + 1 < len(resized_imgs):
-                        image = np.vstack((image, resized_imgs[i + 1]))
-                image_for_concat = np.vstack(
-                    (image,
-                     np.zeros((height - image.shape[0], height // 4, channel), np.uint8)))
-                image_for_concat_update_before = cv2.getTickCount()
-
-    concatenated_image = np.concatenate([img, image_for_concat], axis=1)
-    return concatenated_image, image_for_concat, image_for_concat_update_before
-
-
 def camera(queues, cap_path, frequence, worker_num, lock):
     cap = cv2.VideoCapture(cap_path)
     global flag
@@ -139,21 +99,21 @@ def main(imgsz1, imgsz2, model_456, model_789, queue1, queue2, lock, timeout):
             detected_digits_ = [[str(idx), i] for idx, i in enumerate(detected_digits)]
             height, width = frame.shape[:2]
             # 识别靶子中三角位置与双位数位置
-            locaters, digits = detect_456(imgsz1, model_456, frame)
+            locaters, digits = detect_456(imgsz1, model_456, frame, conf, iou)
 
             # 截取靶子中双位数图片，并根据靶子中三角位置与双位数位置计算旋转角度，旋转截取图片，获取旋转后图片以及对应双位数位置
             rotated_imgs, xywhs, xywhs_ = from_456_to_789(locaters, digits, frame)
 
             # 识别旋转后图片上两单位数的数值，并合并为双位数数值
-            double_digits, xywhs = detect_789(imgsz2, model_789, rotated_imgs, xywhs)
+            double_digits, xywhs = detect_789(imgsz2, model_789, rotated_imgs, xywhs, conf, iou)
 
             # 对双位数和三角画框(第一模型检测结果),对靶子整体画框（算法配对结果），debug用
-            # frame = plot(['locater' for i in range(len(locaters))], locaters, frame)
-            # frame = plot(['digit' for i in range(len(digits))], digits, frame)
-            # xyxys = [(min(x1 - w1, x2 - w2), min(y1 - h1, y2 - h2), max(x1 + w1, x2 + w2), max((y1 + h1, y2 + h2))) for
-            #          (x1, y1, w1, h1), (x2, y2, w2, h2) in zip(xywhs, xywhs_)]
-            # for x1, y1, x2, y2 in xyxys:
-            #     cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+            frame = plot(['locater' for i in range(len(locaters))], locaters, frame)
+            frame = plot(['digit' for i in range(len(digits))], digits, frame)
+            xyxys = [(min(x1 - w1, x2 - w2), min(y1 - h1, y2 - h2), max(x1 + w1, x2 + w2), max((y1 + h1, y2 + h2))) for
+                     (x1, y1, w1, h1), (x2, y2, w2, h2) in zip(xywhs, xywhs_)]
+            for x1, y1, x2, y2 in xyxys:
+                cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
 
             # 根据双位数位置以及数值画框并标记数值
             bounded_image = plot(double_digits, xywhs, frame)
@@ -201,11 +161,6 @@ def save(save_frame_queue, cap_path, frequence, lock):
 
 
 if __name__ == '__main__':
-    cap_path = 0
-    # cap_path = r'E:\desktop\456_test\20231001_125535.mp4'
-    frequence = 250
-    worker_num = 10
-    timeout = 10
 
     # 视频流队列
     input_queues = [queue.Queue(maxsize=50) for i in range(worker_num)]

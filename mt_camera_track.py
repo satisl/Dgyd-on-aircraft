@@ -9,6 +9,22 @@ import queue
 import common
 from common import detect_456, detect_789, update_fps
 
+model_456_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\456_300dataset_imgsz640_v8n_SGD\weights\best.engine'
+model_789_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\789_800dataset_imgsz96_v8n_SGD\weights\best.engine'
+coefficient1 = 2.5
+coefficient2 = 2 * 0.5
+coefficient3 = 0.005
+imgsz1 = 640
+imgsz2 = 96
+conf = 0.5
+iou = 0.5
+target_num = input('请输入要检测的数字（如:07）')
+cap_path = 0
+# cap_path = r'E:\desktop\456_test\20231001_125958.mp4'
+frequence = 250
+worker_num = 8
+timeout = 10
+
 
 def from_456_to_789(locaters, digits, image):
     rotated_imgs = []
@@ -84,13 +100,13 @@ def detect(imgsz1, imgsz2, model_456, model_789, queue1, queue2, timeout):
             frame = queue1.get(timeout=timeout)
 
             # 1 识别靶子中三角位置与双位数位置
-            locaters, digits = detect_456(imgsz1, model_456, frame)
+            locaters, digits = detect_456(imgsz1, model_456, frame, conf, iou)
 
             # 2 截取靶子中双位数图片，并根据靶子中三角位置与双位数位置计算旋转角度，旋转截取图片，获取旋转后图片以及对应双位数位置
             rotated_imgs, xyxys = from_456_to_789(locaters, digits, frame)
 
             # 3 识别旋转后图片上两单位数的数值，并合并为双位数数值
-            double_digits, xyxys = detect_789(imgsz2, model_789, rotated_imgs, xyxys)
+            double_digits, xyxys = detect_789(imgsz2, model_789, rotated_imgs, xyxys, conf, iou)
 
             # 4 检测后图片添加至队列
             target_bbox = None
@@ -166,19 +182,6 @@ def save(queue, cap_path, frequence, lock):
 
 
 if __name__ == '__main__':
-    model_456_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\456_300dataset_imgsz640_v8n_SGD\weights\best.engine'
-    model_789_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\789_800dataset_imgsz96_v8n_SGD\weights\best.engine'
-    coefficient1 = 2.5
-    coefficient2 = 2 * 0.5
-    coefficient3 = 0.005
-    imgsz1 = 640
-    imgsz2 = 96
-    target_num = '96'
-    cap_path = 0
-    # cap_path = r'E:\desktop\456_test\20231001_125958.mp4'
-    frequence = 250
-    worker_num = 8
-    timeout = 10
 
     # 视频流队列
     detect_queues = [queue.Queue(maxsize=50) for i in range(worker_num)]
