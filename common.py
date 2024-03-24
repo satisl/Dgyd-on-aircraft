@@ -64,8 +64,8 @@ def concatenate(img, rotated_imgs, height, image_for_concat, image_for_concat_up
 
 
 def detect_2(imgsz, model, img, conf, iou):
-    results_456 = model.predict(source=img, imgsz=imgsz, half=True,
-                                    save=False, conf=conf, iou=iou, verbose=False)
+    results_456 = model.predict(source=img, imgsz=imgsz, half=True, device='cuda:0',
+                                save=False, conf=conf, iou=iou, verbose=False)
     r = results_456[0]
     # 获取图片检测相关信息
     xywh = r.boxes.xywh.tolist()
@@ -87,8 +87,8 @@ def detect_3(imgsz, model, rotated_imgs, _s, conf, iou):
     __s = []
     for rotated_img, _ in zip(rotated_imgs, _s):
         # 检测旋转后靶子，具体获取双位数数值
-        results = model.predict(source=rotated_img, imgsz=imgsz, half=True,
-                                    save=False, conf=conf, iou=iou, verbose=False)
+        results = model.predict(source=rotated_img, imgsz=imgsz, half=True, device='cuda:0',
+                                save=False, conf=conf, iou=iou, verbose=False)
 
         r = results[0]
         xywh = r.boxes.xywh.tolist()
@@ -105,8 +105,8 @@ def detect_3(imgsz, model, rotated_imgs, _s, conf, iou):
 
 
 def detect_4(imgsz, model, img, conf, iou):
-    results_456 = model.predict(source=img, imgsz=imgsz, half=True,
-                                    save=False, conf=conf, iou=iou, verbose=False)
+    results_456 = model.predict(source=img, imgsz=imgsz, half=True, device='cuda:0',
+                                save=False, conf=conf, iou=iou, verbose=False)
     r = results_456[0]
     # 获取图片检测相关信息
     xywhs = r.boxes.xywh.tolist()
@@ -117,8 +117,8 @@ def detect_4(imgsz, model, img, conf, iou):
 def detect_5(imgsz, model, imgs, clss, conf, iou):
     for idx, img in enumerate(imgs):
         # 检测旋转后靶子，具体获取双位数数值
-        results = model.predict(source=img, imgsz=imgsz, half=True,
-                                    save=False, conf=conf, iou=iou, verbose=False)
+        results = model.predict(source=img, imgsz=imgsz, half=True, device='cuda:0',
+                                save=False, conf=conf, iou=iou, verbose=False)
 
         r = results[0]
         xywh = r.boxes.xywh.tolist()
