@@ -6,18 +6,20 @@ from ultralytics.utils.plotting import Annotator
 import queue
 import common
 
-model_4_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\4_300dataset_imgsz640_v8n_SGD\weights\best.pt'
-model_5_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\5_700dataset_imgsz160_v8n_Adam\weights\best.pt'
+model_4_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\4_300dataset_imgsz640_v8n_SGD\weights\best.engine'
+model_5_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\5_700dataset_imgsz160_v8n_Adam\weights\best.engine'
 coefficient = 0.6
 imgsz1 = 640
 imgsz2 = 160
 conf = 0.5
 iou = 0.5
-cap_path = 0
-# cap_path = r'E:\desktop\456_test\20231001_125535.mp4'
+# cap_path = 0
+cap_path = r'E:\desktop\456_test\VID20240324163025.mp4'
+# cap_path = 'rtsp://admin:12345@192.168.10.240:8554/live'
 frequence = 250
-worker_num = 1
+worker_num = 15
 timeout = 10
+save_width, save_height = 960, 480
 
 
 def plot(double_digits, xywhs, image, coefficient=0.005):
@@ -70,9 +72,15 @@ def main(imgsz1, imgsz2, model_456, model_789, queue1, queue2, lock, timeout):
             # 识别旋转后图片上两单位数的数值，并合并为双位数数值
             clss = common.detect_5(imgsz2, model_789, cropped_imgs, ['detected' for i in range(len(cropped_imgs))],
                                    conf, iou)
-
+            clss_ = []
+            xywhs_ = []
+            for i, j in zip(clss, xywhs):
+                if i != 'detected':
+                    clss_.append(i)
+                    xywhs_.append(j)
+            bounded_image = plot(clss_, xywhs_, frame)
             # 根据双位数位置以及数值画框并标记数值
-            bounded_image = plot(clss, xywhs, frame)
+            # bounded_image = plot(clss, xywhs, frame)
 
             queue2.put(bounded_image)
 
@@ -82,10 +90,9 @@ def main(imgsz1, imgsz2, model_456, model_789, queue1, queue2, lock, timeout):
 
 def save(save_frame_queue, cap_path, frequence, lock):
     cap = cv2.VideoCapture(cap_path)
-    width, height = int(cap.get(3)), int(cap.get(4))
     fourcc = cv2.VideoWriter.fourcc(*'XVID')
     out = cv2.VideoWriter(f'output/{cv2.getTickCount()}.avi', fourcc, 30,
-                          (width + height // 4, height))
+                          (save_width, save_height))
     global save_flag
     while save_flag:
         lock.acquire()
@@ -94,7 +101,7 @@ def save(save_frame_queue, cap_path, frequence, lock):
 
         time.sleep(1 / frequence)
         if save_frame_queue.qsize() > 0:
-            out.write(save_frame_queue.get())
+            out.write(cv2.resize(save_frame_queue.get(), (save_width, save_height)))
     out.release()
 
 

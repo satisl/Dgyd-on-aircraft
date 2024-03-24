@@ -18,11 +18,13 @@ imgsz2 = 96
 conf = 0.5
 iou = 0.5
 # cap_path = 0
-cap_path = r'E:\desktop\456_test\20231001_125535.mp4'
+cap_path = r'E:\desktop\456_test\VID20240324163025.mp4'
+# cap_path = 'rtsp://admin:12345@192.168.10.240:8554/live'
 frequence = 250
 worker_num = 10
 timeout = 10
 detected_frames_frequence = 10
+save_width, save_height = 960, 480
 
 
 def from_2_to_3(locaters, digits, image):
@@ -91,15 +93,15 @@ def main(imgsz1, imgsz2, model1, model2, queue1, queue2, lock, timeout):
             rotated_imgs, xywhs, xywhs_ = from_2_to_3(locaters, digits, frame)
 
             # 识别旋转后图片上两单位数的数值，并合并为双位数数值
-            double_digits, xywhs = detect_3(imgsz2, model2, rotated_imgs, xywhs, conf, iou)
+            double_digits, xywhs_zipped = detect_3(imgsz2, model2, rotated_imgs, zip(xywhs, xywhs_), conf, iou)
 
             # 对双位数和三角画框(第一模型检测结果),对靶子整体画框（算法配对结果），debug用
-            frame = common.plot(['locater' for i in range(len(locaters))], locaters, frame)
-            frame = common.plot(['digit' for i in range(len(digits))], digits, frame)
-            xyxys = [(min(x1 - w1, x2 - w2), min(y1 - h1, y2 - h2), max(x1 + w1, x2 + w2), max((y1 + h1, y2 + h2))) for
-                     (x1, y1, w1, h1), (x2, y2, w2, h2) in zip(xywhs, xywhs_)]
-            for x1, y1, x2, y2 in xyxys:
-                cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+            # frame = common.plot(['locater' for i in range(len(locaters))], locaters, frame)
+            # frame = common.plot(['digit' for i in range(len(digits))], digits, frame)
+            # xyxys = [(min(x1 - w1, x2 - w2), min(y1 - h1, y2 - h2), max(x1 + w1, x2 + w2), max((y1 + h1, y2 + h2))) for
+            #          (x1, y1, w1, h1), (x2, y2, w2, h2) in xywhs_zipped]
+            # for x1, y1, x2, y2 in xyxys:
+            #     cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
 
             # 根据双位数位置以及数值画框并标记数值
             bounded_image = common.plot(double_digits, xywhs, frame)
@@ -112,7 +114,6 @@ def main(imgsz1, imgsz2, model1, model2, queue1, queue2, lock, timeout):
             lock.acquire()
             if len(rotated_imgs) > 0:
                 detected_frames_num += 1
-                print(detected_frames_num)
                 if detected_frames_num > detected_frames_frequence:
                     flag1 = True
                     detected_frames_num = 0
@@ -177,10 +178,9 @@ def show(queues, queue1, frequence, worker_num, lock, timeout):
 
 def save(save_frame_queue, cap_path, frequence, lock):
     cap = cv2.VideoCapture(cap_path)
-    width, height = int(cap.get(3)), int(cap.get(4))
     fourcc = cv2.VideoWriter.fourcc(*'XVID')
     out = cv2.VideoWriter(f'output/{now_time}/{cv2.getTickCount()}.avi', fourcc, 30,
-                          (width, height))
+                          (save_width, save_height))
     global save_flag
     while save_flag:
         lock.acquire()
@@ -189,7 +189,7 @@ def save(save_frame_queue, cap_path, frequence, lock):
 
         time.sleep(1 / frequence)
         if save_frame_queue.qsize() > 0:
-            out.write(save_frame_queue.get())
+            out.write(cv2.resize(save_frame_queue.get(), (save_width, save_height)))
     out.release()
 
 

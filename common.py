@@ -123,7 +123,6 @@ def detect_5(imgsz, model, imgs, clss, conf, iou):
         r = results[0]
         xywh = r.boxes.xywh.tolist()
         cls = r.boxes.cls.tolist()
-        print(cls)
 
         if len(xywh) == 3:
             xys = []
@@ -137,8 +136,13 @@ def detect_5(imgsz, model, imgs, clss, conf, iou):
 
             if xy is not None and len(xys) == 2:
                 # 根据三角头和双位数相对位置得出双位数数值
-                sita = math.atan((xys[0][0][1] - xys[1][0][1]) / (xys[0][0][0] - xys[1][0][0]))
-                # print(sita)
+                delta_y = xys[0][0][1] - xys[1][0][1]
+                delta_x = xys[0][0][0] - xys[1][0][0]
+                if delta_x != 0:
+                    sita = math.atan(delta_y / delta_x)
+                else:
+                    sita = math.pi if delta_y > 0 else -math.pi
+
                 x_0 = (xys[0][0][0] - xy[0]) * math.cos(sita) - (xys[0][0][1] - xy[1]) * math.sin(sita)
                 x_1 = (xys[1][0][0] - xy[0]) * math.cos(sita) - (xys[1][0][1] - xy[1]) * math.sin(sita)
                 y_0 = (xys[0][0][0] - xy[0]) * math.sin(sita) + (xys[0][0][1] - xy[1]) * math.cos(sita)
