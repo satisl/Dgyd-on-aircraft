@@ -7,10 +7,10 @@ import cv2
 import threading
 import queue
 import common
-from common import detect_456, detect_789, update_fps
+from common import detect_2, detect_3, update_fps
 
-model_456_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\456_300dataset_imgsz640_v8n_SGD\weights\best.engine'
-model_789_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\789_800dataset_imgsz96_v8n_SGD\weights\best.engine'
+model_2_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\2_300dataset_imgsz640_v8n_SGD\weights\best.engine'
+model_3_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\3_800dataset_imgsz96_v8n_SGD\weights\best.engine'
 coefficient1 = 2.5
 coefficient2 = 2 * 0.5
 coefficient3 = 0.005
@@ -26,7 +26,7 @@ worker_num = 8
 timeout = 10
 
 
-def from_456_to_789(locaters, digits, image):
+def from_2_to_3(locaters, digits, image):
     rotated_imgs = []
     xyxys = []
     for i in digits:
@@ -93,20 +93,20 @@ def camera(queues, cap_path, frequence, worker_num, lock):
         common.camera(queues, cap, frequence, worker_num, lock)
 
 
-def detect(imgsz1, imgsz2, model_456, model_789, queue1, queue2, timeout):
+def detect(imgsz1, imgsz2, model1, model2, queue1, queue2, timeout):
     global flag
     while flag:
         try:
             frame = queue1.get(timeout=timeout)
 
             # 1 识别靶子中三角位置与双位数位置
-            locaters, digits = detect_456(imgsz1, model_456, frame, conf, iou)
+            locaters, digits = detect_2(imgsz1, model1, frame, conf, iou)
 
             # 2 截取靶子中双位数图片，并根据靶子中三角位置与双位数位置计算旋转角度，旋转截取图片，获取旋转后图片以及对应双位数位置
-            rotated_imgs, xyxys = from_456_to_789(locaters, digits, frame)
+            rotated_imgs, xyxys = from_2_to_3(locaters, digits, frame)
 
             # 3 识别旋转后图片上两单位数的数值，并合并为双位数数值
-            double_digits, xyxys = detect_789(imgsz2, model_789, rotated_imgs, xyxys, conf, iou)
+            double_digits, xyxys = detect_3(imgsz2, model2, rotated_imgs, xyxys, conf, iou)
 
             # 4 检测后图片添加至队列
             target_bbox = None
@@ -196,7 +196,7 @@ if __name__ == '__main__':
     t1.start()
 
     # ai检测视频帧线程
-    models = [(YOLO(model_456_path, task='detect'), YOLO(model_789_path, task='detect'))
+    models = [(YOLO(model_2_path, task='detect'), YOLO(model_3_path, task='detect'))
               for i in range(worker_num)]
     tasks = [threading.Thread(target=detect,
                               args=(

@@ -1,6 +1,20 @@
 import cv2
 import time
 import numpy as np
+import math
+from ultralytics.utils.plotting import Annotator
+
+
+def plot(double_digits, xywhs, image, coefficient=0.005):
+    # 在原图片上绘制框并标上具体双位数数值
+    h, w = image.shape[:2]
+    annotator = Annotator(image, line_width=int(min(w, h) * coefficient))
+    for dg, xywh in zip(double_digits, xywhs):
+        x, y, w, h = xywh
+        xyxy = [x - w / 2, y - h / 2, x + w / 2, y + w / 2]
+        annotator.box_label(xyxy, label=f'{dg}:{int(w)}*{int(h)}')
+
+    return annotator.im
 
 
 def text(img, width, detected_digits, font=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1, font_thickness=2):
@@ -49,8 +63,8 @@ def concatenate(img, rotated_imgs, height, image_for_concat, image_for_concat_up
     return concatenated_image, image_for_concat, image_for_concat_update_before
 
 
-def detect_456(imgsz, model_456, img, conf, iou):
-    results_456 = model_456.predict(source=img, imgsz=imgsz, half=True,
+def detect_2(imgsz, model, img, conf, iou):
+    results_456 = model.predict(source=img, imgsz=imgsz, half=True,
                                     save=False, conf=conf, iou=iou, verbose=False)
     r = results_456[0]
     # 获取图片检测相关信息
@@ -68,12 +82,12 @@ def detect_456(imgsz, model_456, img, conf, iou):
     return locaters, digits
 
 
-def detect_789(imgsz, model_789, rotated_imgs, _s, conf, iou):
+def detect_3(imgsz, model, rotated_imgs, _s, conf, iou):
     double_digits = []
     __s = []
     for rotated_img, _ in zip(rotated_imgs, _s):
         # 检测旋转后靶子，具体获取双位数数值
-        results = model_789.predict(source=rotated_img, imgsz=imgsz, half=True,
+        results = model.predict(source=rotated_img, imgsz=imgsz, half=True,
                                     save=False, conf=conf, iou=iou, verbose=False)
 
         r = results[0]
@@ -88,6 +102,53 @@ def detect_789(imgsz, model_789, rotated_imgs, _s, conf, iou):
             double_digits.append(double_digit)
             __s.append(_)
     return double_digits, __s
+
+
+def detect_4(imgsz, model, img, conf, iou):
+    results_456 = model.predict(source=img, imgsz=imgsz, half=True,
+                                    save=False, conf=conf, iou=iou, verbose=False)
+    r = results_456[0]
+    # 获取图片检测相关信息
+    xywhs = r.boxes.xywh.tolist()
+
+    return xywhs
+
+
+def detect_5(imgsz, model, imgs, clss, conf, iou):
+    for idx, img in enumerate(imgs):
+        # 检测旋转后靶子，具体获取双位数数值
+        results = model.predict(source=img, imgsz=imgsz, half=True,
+                                    save=False, conf=conf, iou=iou, verbose=False)
+
+        r = results[0]
+        xywh = r.boxes.xywh.tolist()
+        cls = r.boxes.cls.tolist()
+        print(cls)
+
+        if len(xywh) == 3:
+            xys = []
+            xy = None
+            # 拆分单位数和三角头
+            for i, j in zip(cls, xywh):
+                if i == 10:
+                    xy = j[:2]
+                else:
+                    xys.append((j[:2], i))
+
+            if xy is not None and len(xys) == 2:
+                # 根据三角头和双位数相对位置得出双位数数值
+                sita = math.atan((xys[0][0][1] - xys[1][0][1]) / (xys[0][0][0] - xys[1][0][0]))
+                # print(sita)
+                x_0 = (xys[0][0][0] - xy[0]) * math.cos(sita) - (xys[0][0][1] - xy[1]) * math.sin(sita)
+                x_1 = (xys[1][0][0] - xy[0]) * math.cos(sita) - (xys[1][0][1] - xy[1]) * math.sin(sita)
+                y_0 = (xys[0][0][0] - xy[0]) * math.sin(sita) + (xys[0][0][1] - xy[1]) * math.cos(sita)
+
+                if (x_0 - x_1) * y_0 < 0:
+                    clss[idx] = f'{int(xys[0][1])}{int(xys[1][1])}'
+                else:
+                    clss[idx] = f'{int(xys[1][1])}{int(xys[0][1])}'
+
+    return clss
 
 
 def update_fps(img, fps, font=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1, font_thickness=2):

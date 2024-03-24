@@ -1,42 +1,31 @@
+import os
 import time
 from ultralytics import YOLO
 import math
 import numpy as np
 import cv2
 import threading
-from ultralytics.utils.plotting import Annotator
 import queue
 import common
-from common import detect_456, detect_789, update_fps, text, concatenate
+from common import detect_2, detect_3, update_fps, text
 
-model_456_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\456_300dataset_imgsz640_v8n_SGD\weights\best.engine'
-model_789_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\789_800dataset_imgsz96_v8n_SGD\weights\best.engine'
-coefficient1 = 2.5
-coefficient2 = 2 * 0.5
+model_2_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\2_300dataset_imgsz640_v8n_SGD\weights\best.engine'
+model_3_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\3_800dataset_imgsz96_v8n_SGD\weights\best.engine'
+coefficient1 = 2.5  # 双位数，靶子配对范围系数
+coefficient2 = 2 * 0.5  # 双位数截取范围系数
 imgsz1 = 640
 imgsz2 = 96
 conf = 0.5
 iou = 0.5
-cap_path = 0
-# cap_path = r'E:\desktop\456_test\20231001_125535.mp4'
+# cap_path = 0
+cap_path = r'E:\desktop\456_test\20231001_125535.mp4'
 frequence = 250
 worker_num = 10
 timeout = 10
+detected_frames_frequence = 10
 
 
-def plot(double_digits, xywhs, image, coefficient=0.005):
-    # 在原图片上绘制框并标上具体双位数数值
-    h, w = image.shape[:2]
-    annotator = Annotator(image, line_width=int(min(w, h) * coefficient))
-    for dg, xywh in zip(double_digits, xywhs):
-        x, y, w, h = xywh
-        xyxy = [x - w / 2, y - h / 2, x + w / 2, y + w / 2]
-        annotator.box_label(xyxy, label=f'{dg}:{int(w)}*{int(h)}')
-
-    return annotator.im
-
-
-def from_456_to_789(locaters, digits, image):
+def from_2_to_3(locaters, digits, image):
     rotated_imgs = []
     xywhs = []
     xywhs_ = []
@@ -88,48 +77,52 @@ def camera(queues, cap_path, frequence, worker_num, lock):
         common.camera(queues, cap, frequence, worker_num, lock)
 
 
-def main(imgsz1, imgsz2, model_456, model_789, queue1, queue2, lock, timeout):
-    image_for_concat = None
-    image_for_concat_update_before = cv2.getTickCount()
-
-    global flag
+def main(imgsz1, imgsz2, model1, model2, queue1, queue2, lock, timeout):
+    global flag, detected_frames_num
     while flag:
         try:
             frame = queue1.get(timeout=timeout)
             detected_digits_ = [[str(idx), i] for idx, i in enumerate(detected_digits)]
             height, width = frame.shape[:2]
             # 识别靶子中三角位置与双位数位置
-            locaters, digits = detect_456(imgsz1, model_456, frame, conf, iou)
+            locaters, digits = detect_2(imgsz1, model1, frame, conf, iou)
 
             # 截取靶子中双位数图片，并根据靶子中三角位置与双位数位置计算旋转角度，旋转截取图片，获取旋转后图片以及对应双位数位置
-            rotated_imgs, xywhs, xywhs_ = from_456_to_789(locaters, digits, frame)
+            rotated_imgs, xywhs, xywhs_ = from_2_to_3(locaters, digits, frame)
 
             # 识别旋转后图片上两单位数的数值，并合并为双位数数值
-            double_digits, xywhs = detect_789(imgsz2, model_789, rotated_imgs, xywhs, conf, iou)
+            double_digits, xywhs = detect_3(imgsz2, model2, rotated_imgs, xywhs, conf, iou)
 
             # 对双位数和三角画框(第一模型检测结果),对靶子整体画框（算法配对结果），debug用
-            frame = plot(['locater' for i in range(len(locaters))], locaters, frame)
-            frame = plot(['digit' for i in range(len(digits))], digits, frame)
+            frame = common.plot(['locater' for i in range(len(locaters))], locaters, frame)
+            frame = common.plot(['digit' for i in range(len(digits))], digits, frame)
             xyxys = [(min(x1 - w1, x2 - w2), min(y1 - h1, y2 - h2), max(x1 + w1, x2 + w2), max((y1 + h1, y2 + h2))) for
                      (x1, y1, w1, h1), (x2, y2, w2, h2) in zip(xywhs, xywhs_)]
             for x1, y1, x2, y2 in xyxys:
                 cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
 
             # 根据双位数位置以及数值画框并标记数值
-            bounded_image = plot(double_digits, xywhs, frame)
+            bounded_image = common.plot(double_digits, xywhs, frame)
 
             # 附上双位数检测次数及最终中位数
-
             texted_image = text(bounded_image, width, detected_digits_)
 
-            # 贴上双位数图片预览图
-            concatenated_image, image_for_concat, image_for_concat_update_before = \
-                concatenate(texted_image,
-                            rotated_imgs, height,
-                            image_for_concat,
-                            image_for_concat_update_before)
+            # 保存旋转后图片
+            flag1 = False
+            lock.acquire()
+            if len(rotated_imgs) > 0:
+                detected_frames_num += 1
+                print(detected_frames_num)
+                if detected_frames_num > detected_frames_frequence:
+                    flag1 = True
+                    detected_frames_num = 0
+            lock.release()
+            if flag1:
+                for i in rotated_imgs:
+                    cv2.imwrite(f'output/{now_time}/{cv2.getTickCount()}.jpg', i)
+
             # 检测后图片添加至队列
-            queue2.put(concatenated_image)
+            queue2.put(texted_image)
 
             # 双位数检测次数计数
             if len(double_digits) != 0:
@@ -142,12 +135,52 @@ def main(imgsz1, imgsz2, model_456, model_789, queue1, queue2, lock, timeout):
             break
 
 
+def show(queues, queue1, frequence, worker_num, lock, timeout):
+    # 主进程cv2.imshow窗口
+    cv2.namedWindow('0', cv2.WINDOW_AUTOSIZE)
+    fps = 0
+    frames_num = 0
+    fps_update_before = cv2.getTickCount()
+    show_flag = True
+
+    while show_flag:
+        time.sleep(1 / frequence)
+        for i in range(worker_num):
+            num = 0
+            for j in range(worker_num):
+                num += queues[j].qsize()
+            lock.acquire()
+            print('show_total', num)
+            lock.release()
+
+            try:
+                frame = queues[i].get(timeout=timeout)
+            except queue.Empty:
+                show_flag = False
+                break
+            frames_num += 1
+            frame = update_fps(frame, fps)  # 附上fps
+            cv2.imshow('0', frame)
+            queue1.put(frame)  # 添加至视频保存队列
+
+            # fps计算
+            if frames_num > 60:
+                fps = frames_num / ((cv2.getTickCount() - fps_update_before) / cv2.getTickFrequency())
+                frames_num = 0
+                fps_update_before = cv2.getTickCount()
+
+        # 检测到q，关闭窗口和所有进程
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            cv2.destroyAllWindows()
+            show_flag = False
+
+
 def save(save_frame_queue, cap_path, frequence, lock):
     cap = cv2.VideoCapture(cap_path)
     width, height = int(cap.get(3)), int(cap.get(4))
     fourcc = cv2.VideoWriter.fourcc(*'XVID')
-    out = cv2.VideoWriter(f'output/{cv2.getTickCount()}.avi', fourcc, 30,
-                          (width + height // 4, height))
+    out = cv2.VideoWriter(f'output/{now_time}/{cv2.getTickCount()}.avi', fourcc, 30,
+                          (width, height))
     global save_flag
     while save_flag:
         lock.acquire()
@@ -161,11 +194,14 @@ def save(save_frame_queue, cap_path, frequence, lock):
 
 
 if __name__ == '__main__':
+    # 创建保存文件夹
+    now_time = cv2.getTickCount()
+    os.makedirs(f'output/{now_time}')
 
     # 视频流队列
     input_queues = [queue.Queue(maxsize=50) for i in range(worker_num)]
     show_queues = [queue.Queue() for i in range(worker_num)]
-    save_frame_queue = queue.Queue()
+    save_queue = queue.Queue()
 
     flag = True
     lock = threading.Lock()
@@ -174,8 +210,9 @@ if __name__ == '__main__':
     t1.start()
 
     # ai检测视频帧线程
+    detected_frames_num = 0
     detected_digits = [0 for i in range(100)]  # 检测结果储存处
-    models = [(YOLO(model_456_path, task='detect'), YOLO(model_789_path, task='detect'))
+    models = [(YOLO(model_2_path, task='detect'), YOLO(model_3_path, task='detect'))
               for i in range(worker_num)]
     tasks = [threading.Thread(target=main,
                               args=(
@@ -188,47 +225,12 @@ if __name__ == '__main__':
 
     # 保存视频帧线程
     save_flag = True
-    t3 = threading.Thread(target=save, args=(save_frame_queue, cap_path, frequence, lock))
+    t3 = threading.Thread(target=save, args=(save_queue, cap_path, frequence, lock))
     t3.start()
 
-    # 主进程cv2.imshow窗口
-    cv2.namedWindow('0', cv2.WINDOW_AUTOSIZE)
-    fps = 0
-    frames_num = 0
-    fps_update_before = cv2.getTickCount()
-    show_flag = True
+    # 主线程展示视频帧
+    show(show_queues, save_queue, frequence, worker_num, lock, timeout)
 
-    while show_flag:
-        time.sleep(1 / frequence)
-        for i in range(worker_num):
-            num = 0
-            for j in range(worker_num):
-                num += show_queues[j].qsize()
-            lock.acquire()
-            # print(f'show:{i}', show_queues[i].qsize())
-            print('show_total', num)
-            lock.release()
-
-            try:
-                frame = show_queues[i].get(timeout=timeout)
-            except queue.Empty:
-                show_flag = False
-                break
-            frames_num += 1
-            frame = update_fps(frame, fps)  # 附上fps
-            cv2.imshow('0', frame)
-            save_frame_queue.put(frame)  # 添加至视频保存队列
-
-            # fps计算
-            if frames_num > 60:
-                fps = frames_num / ((cv2.getTickCount() - fps_update_before) / cv2.getTickFrequency())
-                frames_num = 0
-                fps_update_before = cv2.getTickCount()
-
-        # 检测到q，关闭窗口和所有进程
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            cv2.destroyAllWindows()
-            show_flag = False
     # 关闭各个线程
     flag = False
     t1.join()
@@ -237,7 +239,7 @@ if __name__ == '__main__':
         i.join()
     print('ai检测线程关闭')
     while True:
-        if save_frame_queue.empty():
+        if save_queue.empty():
             save_flag = False
             t3.join()
             print('视频保存线程关闭')
