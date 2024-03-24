@@ -4,10 +4,10 @@ import os
 from PIL import Image
 
 project_name = 'yolov8'
-dataset_name = '456.yaml'
-imgsz = 480
+dataset_name = r'D:\Double-digit-yolo-detection-on-aircraft\datasets\5\5.yaml'
+imgsz = 160
 optimizer = 'Adam'
-model_name = f'456_300dataset_imgsz{imgsz}_v8n_{optimizer}'
+model_name = f'5_700dataset_imgsz{imgsz}_v8n_{optimizer}'
 
 batchsz = -1
 
@@ -17,11 +17,11 @@ if __name__ == '__main__':
     model = YOLO('yolov8n.yaml')
     # model = YOLO('yolov8/123_imgsz1280_v8n_Adam/weights/last.pt')
 
-    model.train(data=dataset_name, epochs=1500,
+    model.train(data=dataset_name, epochs=1000,
                 imgsz=imgsz, batch=batchsz, cache='disk',
                 pretrained=False, optimizer=optimizer,
                 amp=True, fliplr=0,
-                val=True, save_period=50, patience=100,
+                val=True, save_period=50, patience=50,
                 name=model_name, project=project_name,
                 verbose=True)
 
@@ -38,8 +38,6 @@ if __name__ == '__main__':
     ckpt.sort(key=lambda x: int(x[5:][:-3]))
     ckpt.extend(['last.pt', 'best.pt'])
 
-    # ，再合并合并后的各个图
-
     metrics = ['F1_curve.png', 'P_curve.png', 'PR_curve.png', 'R_curve.png']
     height = 1500
     width = 2250
@@ -47,10 +45,10 @@ if __name__ == '__main__':
     for id1, i in enumerate(ckpt):
 
         model = YOLO(f'{project_name}/{model_name}/weights/{i}')
-        model.val(data=dataset_name, split='test', imgsz=imgsz, batch=16, half=True, plots=True,
-                  name=f'{model_name}--{i[:-3]}')
+        model.val(data=dataset_name, split='test', imgsz=imgsz, batch=16, half=True,
+                  plots=True, iou=0.5, name=f'{model_name}--{i[:-3]}')
         del model
-        # time.sleep(60)
+        time.sleep(60)
 
         image = Image.new("RGB", (len(metrics) * width, height), "white")
 
