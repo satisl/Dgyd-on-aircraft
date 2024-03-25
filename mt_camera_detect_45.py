@@ -1,3 +1,4 @@
+import os
 import time
 from ultralytics import YOLO
 import cv2
@@ -6,8 +7,8 @@ from ultralytics.utils.plotting import Annotator
 import queue
 import common
 
-model_4_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\4_300dataset_imgsz640_v8n_SGD\weights\best.engine'
-model_5_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\5_700dataset_imgsz160_v8n_Adam\weights\best.engine'
+model_4_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\4_400dataset_imgsz640_v8n_SGD\weights\best.engine'
+model_5_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\5_1100dataset_imgsz160_v8n_Adam\weights\best.engine'
 coefficient = 0.6
 imgsz1 = 640
 imgsz2 = 160
@@ -16,10 +17,11 @@ iou = 0.5
 # cap_path = 0
 cap_path = r'E:\desktop\456_test\VID20240324163025.mp4'
 # cap_path = 'rtsp://admin:12345@192.168.10.240:8554/live'
-frequence = 250
-worker_num = 15
-timeout = 10
-save_width, save_height = 960, 480
+frequence = 20
+worker_num = 5
+timeout = 3
+detected_frames_frequence = 10
+save_width, save_height = 640, 480
 
 
 def plot(double_digits, xywhs, image, coefficient=0.005):
@@ -58,8 +60,8 @@ def camera(queues, cap_path, frequence, worker_num, lock):
         common.camera(queues, cap, frequence, worker_num, lock)
 
 
-def main(imgsz1, imgsz2, model_456, model_789, queue1, queue2, lock, timeout):
-    global flag
+def main(imgsz1, imgsz2, model_456, model_789, queue1, queue2, lock, timeout, detected_frames_frequence):
+    global flag, detected_frames_num
     while flag:
         try:
             frame = queue1.get(timeout=timeout)
@@ -68,44 +70,57 @@ def main(imgsz1, imgsz2, model_456, model_789, queue1, queue2, lock, timeout):
 
             # 截取靶子图片
             cropped_imgs = from_4_to_5(xywhs, frame)
+            flag1 = False
+            lock.acquire()
+            if len(cropped_imgs) > 0:
+                detected_frames_num += 1
+                if detected_frames_num > detected_frames_frequence:
+                    flag1 = True
+                    detected_frames_num = 0
+            lock.release()
+            if flag1:
+                for i in cropped_imgs:
+                    cv2.imwrite(f'output/{now_time}/{cv2.getTickCount()}.jpg', i)
 
             # 识别旋转后图片上两单位数的数值，并合并为双位数数值
             clss = common.detect_5(imgsz2, model_789, cropped_imgs, ['detected' for i in range(len(cropped_imgs))],
                                    conf, iou)
-            clss_ = []
-            xywhs_ = []
-            for i, j in zip(clss, xywhs):
-                if i != 'detected':
-                    clss_.append(i)
-                    xywhs_.append(j)
-            bounded_image = plot(clss_, xywhs_, frame)
+            # clss_ = []
+            # xywhs_ = []
+            # for i, j in zip(clss, xywhs):
+            #     if i != 'detected':
+            #         clss_.append(i)
+            #         xywhs_.append(j)
+            # bounded_image = plot(clss_, xywhs_, frame)
             # 根据双位数位置以及数值画框并标记数值
-            # bounded_image = plot(clss, xywhs, frame)
+            bounded_image = plot(clss, xywhs, frame)
 
-            queue2.put(bounded_image)
+            queue2.put(cv2.resize(bounded_image, (save_width, save_height)))
 
         except queue.Empty:
             break
 
 
-def save(save_frame_queue, cap_path, frequence, lock):
-    cap = cv2.VideoCapture(cap_path)
+def save(save_frame_queue, lock):
     fourcc = cv2.VideoWriter.fourcc(*'XVID')
-    out = cv2.VideoWriter(f'output/{cv2.getTickCount()}.avi', fourcc, 30,
+    out = cv2.VideoWriter(f'output/{now_time}/{cv2.getTickCount()}.avi', fourcc, 30,
                           (save_width, save_height))
     global save_flag
     while save_flag:
         lock.acquire()
         print('save', save_frame_queue.qsize())
         lock.release()
-
-        time.sleep(1 / frequence)
-        if save_frame_queue.qsize() > 0:
-            out.write(cv2.resize(save_frame_queue.get(), (save_width, save_height)))
+        try:
+            out.write(save_frame_queue.get(timeout=timeout))
+        except queue.Empty:
+            break
     out.release()
 
 
 if __name__ == '__main__':
+    now_time = cv2.getTickCount()
+    os.makedirs(f'output/{now_time}')
+    detected_frames_num = 0
 
     # 视频流队列
     input_queues = [queue.Queue(maxsize=50) for i in range(worker_num)]
@@ -125,7 +140,7 @@ if __name__ == '__main__':
     tasks = [threading.Thread(target=main,
                               args=(
                                   imgsz1, imgsz2, i[0], i[1], input_queues[idx], show_queues[idx], lock,
-                                  timeout
+                                  detected_frames_frequence, timeout
                               ))
              for idx, i in enumerate(models)]
     for i in tasks:
@@ -133,7 +148,7 @@ if __name__ == '__main__':
 
     # 保存视频帧线程
     save_flag = True
-    t3 = threading.Thread(target=save, args=(save_frame_queue, cap_path, frequence, lock))
+    t3 = threading.Thread(target=save, args=(save_frame_queue, lock))
     t3.start()
 
     # 主进程cv2.imshow窗口
@@ -172,11 +187,11 @@ if __name__ == '__main__':
 
         # 检测到q，关闭窗口和所有进程
         if cv2.waitKey(1) & 0xFF == ord('q'):
-            cv2.destroyAllWindows()
             show_flag = False
     # 关闭各个线程
     flag = False
     t1.join()
+    cv2.destroyAllWindows()
     print('摄像头线程关闭')
     for i in tasks:
         i.join()

@@ -4,22 +4,22 @@ import os
 from PIL import Image
 
 project_name = 'yolov8'
-dataset_name = r'D:\Double-digit-yolo-detection-on-aircraft\datasets\5\5.yaml'
-imgsz = 160
-optimizer = 'Adam'
-model_name = f'5_700dataset_imgsz{imgsz}_v8s_{optimizer}'
 
-batchsz = 400
+dataset_name = r'D:\Double-digit-yolo-detection-on-aircraft\datasets\2\2.yaml'
+imgsz = 640
+optimizer = 'SGD'
+model_name = f'2_400dataset_imgsz{imgsz}_v8n_{optimizer}'
+batchsz = -1
+model = YOLO(r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\2_300dataset_imgsz640_v8n_SGD\weights\best.pt')
 
 if __name__ == '__main__':
     # train and val
 
-    model = YOLO('yolov8s.yaml')
     # model = YOLO('yolov8/123_imgsz1280_v8n_Adam/weights/last.pt')
 
     model.train(data=dataset_name, epochs=1000,
                 imgsz=imgsz, batch=batchsz, cache='disk',
-                pretrained=False, optimizer=optimizer,
+                pretrained=True, optimizer=optimizer,
                 amp=True, fliplr=0,
                 val=True, save_period=50, patience=50,
                 name=model_name, project=project_name,
@@ -48,7 +48,7 @@ if __name__ == '__main__':
         model.val(data=dataset_name, split='test', imgsz=imgsz, batch=16, half=True,
                   plots=True, iou=0.5, name=f'{model_name}--{i[:-3]}')
         del model
-        time.sleep(60)
+        # time.sleep(60)
 
         image = Image.new("RGB", (len(metrics) * width, height), "white")
 

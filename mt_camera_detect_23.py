@@ -24,7 +24,7 @@ frequence = 250
 worker_num = 10
 timeout = 10
 detected_frames_frequence = 10
-save_width, save_height = 960, 480
+save_width, save_height = 640, 480
 
 
 def from_2_to_3(locaters, digits, image):
@@ -123,7 +123,7 @@ def main(imgsz1, imgsz2, model1, model2, queue1, queue2, lock, timeout):
                     cv2.imwrite(f'output/{now_time}/{cv2.getTickCount()}.jpg', i)
 
             # 检测后图片添加至队列
-            queue2.put(texted_image)
+            queue2.put(cv2.resize(texted_image, (save_width, save_height)))
 
             # 双位数检测次数计数
             if len(double_digits) != 0:
@@ -189,7 +189,7 @@ def save(save_frame_queue, cap_path, frequence, lock):
 
         time.sleep(1 / frequence)
         if save_frame_queue.qsize() > 0:
-            out.write(cv2.resize(save_frame_queue.get(), (save_width, save_height)))
+            out.write(save_frame_queue.get())
     out.release()
 
 

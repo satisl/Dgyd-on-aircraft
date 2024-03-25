@@ -24,6 +24,7 @@ cap_path = 0
 frequence = 250
 worker_num = 8
 timeout = 10
+save_width, save_height = 640, 480
 
 
 def from_2_to_3(locaters, digits, image):
@@ -157,7 +158,7 @@ def track(queues, queue_, worker_num, timeout, lock):
                 frames_num += 1
                 frame = update_fps(frame, fps)
 
-                queue_.put(frame)
+                queue_.put(cv2.resize(frame, (save_width, save_height)))
             except queue.Empty:
                 flag1 = False
                 break
@@ -165,10 +166,9 @@ def track(queues, queue_, worker_num, timeout, lock):
 
 def save(queue, cap_path, frequence, lock):
     cap = cv2.VideoCapture(cap_path)
-    width, height = int(cap.get(3)), int(cap.get(4))
     fourcc = cv2.VideoWriter.fourcc(*'XVID')
     out = cv2.VideoWriter(f'output/{cv2.getTickCount()}.avi', fourcc, 30,
-                          (width, height))
+                          (save_width, save_height))
     global save_flag
     while save_flag:
         lock.acquire()
