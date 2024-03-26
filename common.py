@@ -143,7 +143,7 @@ def detect_5(imgsz, model, imgs, _s, conf, iou):
                 # 根据三角头和双位数相对位置得出双位数数值
                 delta_y = xys[0][0][1] - xys[1][0][1]
                 delta_x = xys[0][0][0] - xys[1][0][0]
-                sita = math.atan(delta_y / (delta_x + 0.01))
+                sita = math.atan2(delta_y, delta_x)
 
                 x_0 = (xys[0][0][0] - xy[0]) * math.cos(sita) + (xys[0][0][1] - xy[1]) * math.sin(sita)
                 x_1 = (xys[1][0][0] - xy[0]) * math.cos(sita) + (xys[1][0][1] - xy[1]) * math.sin(sita)
@@ -180,6 +180,7 @@ def camera(queues, cap, frequence, worker_num, lock):
     lock.acquire()
     print('detect_total', num)
     lock.release()
+
 
 def show(queues, queue1, frequence, worker_num, lock, timeout):
     # 主进程cv2.imshow窗口
