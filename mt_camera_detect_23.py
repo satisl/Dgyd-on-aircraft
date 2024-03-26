@@ -9,8 +9,8 @@ import queue
 import common
 from common import detect_2, detect_3, update_fps, text
 
-model_2_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\2_300dataset_imgsz640_v8n_SGD\weights\best.engine'
-model_3_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\3_800dataset_imgsz96_v8n_SGD\weights\best.engine'
+model_2_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\2_400dataset_imgsz640_v8n_SGD\weights\best.engine'
+model_3_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\3_1100dataset_imgsz96_v8n_SGD\weights\best.engine'
 coefficient1 = 2.5  # 双位数，靶子配对范围系数
 coefficient2 = 2 * 0.5  # 双位数截取范围系数
 imgsz1 = 640
@@ -18,11 +18,11 @@ imgsz2 = 96
 conf = 0.5
 iou = 0.5
 # cap_path = 0
-cap_path = r'E:\desktop\456_test\VID20240324163025.mp4'
+cap_path = r'E:\desktop\456_test\benchmark\quick moving.mp4'
 # cap_path = 'rtsp://admin:12345@192.168.10.240:8554/live'
 frequence = 250
 worker_num = 10
-timeout = 10
+timeout = 3
 detected_frames_frequence = 10
 save_width, save_height = 640, 480
 
@@ -79,13 +79,15 @@ def camera(queues, cap_path, frequence, worker_num, lock):
         common.camera(queues, cap, frequence, worker_num, lock)
 
 
-def main(imgsz1, imgsz2, model1, model2, queue1, queue2, lock, timeout):
+def main(imgsz1, imgsz2, queue1, queue2, lock, detected_frames_frequence, timeout):
+    model1 = YOLO(model_2_path, task='detect')
+    model2 = YOLO(model_3_path, task='detect')
     global flag, detected_frames_num
     while flag:
         try:
             frame = queue1.get(timeout=timeout)
             detected_digits_ = [[str(idx), i] for idx, i in enumerate(detected_digits)]
-            height, width = frame.shape[:2]
+            width = frame.shape[1]
             # 识别靶子中三角位置与双位数位置
             locaters, digits = detect_2(imgsz1, model1, frame, conf, iou)
 
@@ -98,16 +100,16 @@ def main(imgsz1, imgsz2, model1, model2, queue1, queue2, lock, timeout):
             # 对双位数和三角画框(第一模型检测结果),对靶子整体画框（算法配对结果），debug用
             # frame = common.plot(['locater' for i in range(len(locaters))], locaters, frame)
             # frame = common.plot(['digit' for i in range(len(digits))], digits, frame)
-            # xyxys = [(min(x1 - w1, x2 - w2), min(y1 - h1, y2 - h2), max(x1 + w1, x2 + w2), max((y1 + h1, y2 + h2))) for
-            #          (x1, y1, w1, h1), (x2, y2, w2, h2) in xywhs_zipped]
-            # for x1, y1, x2, y2 in xyxys:
-            #     cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+            xyxys = [(min(x1 - w1, x2 - w2), min(y1 - h1, y2 - h2), max(x1 + w1, x2 + w2), max((y1 + h1, y2 + h2))) for
+                     (x1, y1, w1, h1), (x2, y2, w2, h2) in xywhs_zipped]
+            for x1, y1, x2, y2 in xyxys:
+                cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
 
             # 根据双位数位置以及数值画框并标记数值
             bounded_image = common.plot(double_digits, xywhs, frame)
 
             # 附上双位数检测次数及最终中位数
-            texted_image = text(bounded_image, width, detected_digits_)
+            texted_image = text(bounded_image, width, detected_digits_, lock)
 
             # 保存旋转后图片
             flag1 = False
@@ -133,6 +135,9 @@ def main(imgsz1, imgsz2, model1, model2, queue1, queue2, lock, timeout):
                     detected_digits[idx] += 1
                 lock.release()
         except queue.Empty:
+            lock.acquire()
+            print('ai检测子线程关闭')
+            lock.release()
             break
 
 
@@ -212,14 +217,11 @@ if __name__ == '__main__':
     # ai检测视频帧线程
     detected_frames_num = 0
     detected_digits = [0 for i in range(100)]  # 检测结果储存处
-    models = [(YOLO(model_2_path, task='detect'), YOLO(model_3_path, task='detect'))
-              for i in range(worker_num)]
     tasks = [threading.Thread(target=main,
                               args=(
-                                  imgsz1, imgsz2, i[0], i[1], input_queues[idx], show_queues[idx], lock,
-                                  timeout
-                              ))
-             for idx, i in enumerate(models)]
+                                  imgsz1, imgsz2, input_queues[idx], show_queues[idx], lock,
+                                  detected_frames_frequence, timeout
+                              )) for idx in range(worker_num)]
     for i in tasks:
         i.start()
 

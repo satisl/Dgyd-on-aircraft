@@ -17,9 +17,11 @@ def plot(double_digits, xywhs, image, coefficient=0.005):
     return annotator.im
 
 
-def text(img, width, detected_digits, font=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1, font_thickness=2):
+def text(img, width, detected_digits, lock, font=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1.5, font_thickness=2):
     # 右上角显示已检测双位数次数
+    lock.acquire()
     dgs = sorted(detected_digits, reverse=True, key=lambda i: i[1])
+    lock.release()
     for i, j in enumerate(dgs[:4]):
         dg_text = f'{j[0]}:{j[1]}'
         dg_text_width, dg_text_height = cv2.getTextSize(dg_text, font, font_scale, font_thickness)[0]
@@ -114,8 +116,10 @@ def detect_4(imgsz, model, img, conf, iou):
     return xywhs
 
 
-def detect_5(imgsz, model, imgs, clss, conf, iou):
-    for idx, img in enumerate(imgs):
+def detect_5(imgsz, model, imgs, _s, conf, iou):
+    xywhs = []
+    clss = []
+    for img, _ in zip(imgs, _s):
         # 检测旋转后靶子，具体获取双位数数值
         results = model.predict(source=img, imgsz=imgsz, half=True, device='cuda:0',
                                 save=False, conf=conf, iou=iou, verbose=False)
@@ -147,12 +151,13 @@ def detect_5(imgsz, model, imgs, clss, conf, iou):
                 x_1 = (xys[1][0][0] - xy[0]) * math.cos(sita) - (xys[1][0][1] - xy[1]) * math.sin(sita)
                 y_0 = (xys[0][0][0] - xy[0]) * math.sin(sita) + (xys[0][0][1] - xy[1]) * math.cos(sita)
 
+                xywhs.append(_)
                 if (x_0 - x_1) * y_0 < 0:
-                    clss[idx] = f'{int(xys[0][1])}{int(xys[1][1])}'
+                    clss.append(f'{int(xys[0][1])}{int(xys[1][1])}')
                 else:
-                    clss[idx] = f'{int(xys[1][1])}{int(xys[0][1])}'
+                    clss.append(f'{int(xys[1][1])}{int(xys[0][1])}')
 
-    return clss
+    return clss, xywhs
 
 
 def update_fps(img, fps, font=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1, font_thickness=2):
