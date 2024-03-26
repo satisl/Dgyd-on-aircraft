@@ -7,7 +7,7 @@ project_name = 'yolov8'
 
 class_ = '5'
 dataset_name = fr'D:\Double-digit-yolo-detection-on-aircraft\datasets\{class_}\{class_}.yaml'
-imgsz = 96
+imgsz = 128
 optimizer = 'Adam'
 model_name = f'{class_}_1100dataset_imgsz{imgsz}_v8n_{optimizer}'
 batchsz = 500  # 96:500 160:300

@@ -141,48 +141,7 @@ def main(imgsz1, imgsz2, queue1, queue2, lock, detected_frames_frequence, timeou
             break
 
 
-def show(queues, queue1, frequence, worker_num, lock, timeout):
-    # 主进程cv2.imshow窗口
-    cv2.namedWindow('0', cv2.WINDOW_AUTOSIZE)
-    fps = 0
-    frames_num = 0
-    fps_update_before = cv2.getTickCount()
-    show_flag = True
-
-    while show_flag:
-        time.sleep(1 / frequence)
-        for i in range(worker_num):
-            num = 0
-            for j in range(worker_num):
-                num += queues[j].qsize()
-            lock.acquire()
-            print('show_total', num)
-            lock.release()
-
-            try:
-                frame = queues[i].get(timeout=timeout)
-            except queue.Empty:
-                show_flag = False
-                break
-            frames_num += 1
-            frame = update_fps(frame, fps)  # 附上fps
-            cv2.imshow('0', frame)
-            queue1.put(frame)  # 添加至视频保存队列
-
-            # fps计算
-            if frames_num > 60:
-                fps = frames_num / ((cv2.getTickCount() - fps_update_before) / cv2.getTickFrequency())
-                frames_num = 0
-                fps_update_before = cv2.getTickCount()
-
-        # 检测到q，关闭窗口和所有进程
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            cv2.destroyAllWindows()
-            show_flag = False
-
-
-def save(save_frame_queue, cap_path, frequence, lock):
-    cap = cv2.VideoCapture(cap_path)
+def save(save_frame_queue, lock):
     fourcc = cv2.VideoWriter.fourcc(*'XVID')
     out = cv2.VideoWriter(f'output/{now_time}/{cv2.getTickCount()}.avi', fourcc, 30,
                           (save_width, save_height))
@@ -191,10 +150,10 @@ def save(save_frame_queue, cap_path, frequence, lock):
         lock.acquire()
         print('save', save_frame_queue.qsize())
         lock.release()
-
-        time.sleep(1 / frequence)
-        if save_frame_queue.qsize() > 0:
-            out.write(save_frame_queue.get())
+        try:
+            out.write(save_frame_queue.get(timeout=timeout))
+        except queue.Empty:
+            break
     out.release()
 
 
@@ -227,11 +186,11 @@ if __name__ == '__main__':
 
     # 保存视频帧线程
     save_flag = True
-    t3 = threading.Thread(target=save, args=(save_queue, cap_path, frequence, lock))
+    t3 = threading.Thread(target=save, args=(save_queue, lock))
     t3.start()
 
     # 主线程展示视频帧
-    show(show_queues, save_queue, frequence, worker_num, lock, timeout)
+    common.show(show_queues, save_queue, frequence, worker_num, lock, timeout)
 
     # 关闭各个线程
     flag = False

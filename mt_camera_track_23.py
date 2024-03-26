@@ -8,9 +8,10 @@ import threading
 import queue
 import common
 from common import detect_2, detect_3, update_fps
+import os
 
-model_2_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\2_300dataset_imgsz640_v8n_SGD\weights\best.engine'
-model_3_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\3_800dataset_imgsz96_v8n_SGD\weights\best.engine'
+model_2_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\2_400dataset_imgsz640_v8n_SGD\weights\best.engine'
+model_3_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\3_1100dataset_imgsz96_v8n_SGD\weights\best.engine'
 coefficient1 = 2.5
 coefficient2 = 2 * 0.5
 coefficient3 = 0.005
@@ -19,11 +20,11 @@ imgsz2 = 96
 conf = 0.5
 iou = 0.5
 target_num = input('请输入要检测的数字（如:07）')
-cap_path = 0
-# cap_path = r'E:\desktop\456_test\20231001_125958.mp4'
+# cap_path = 0
+cap_path = r'E:\desktop\456_test\benchmark\quick moving.mp4'
 frequence = 250
 worker_num = 8
-timeout = 10
+timeout = 3
 save_width, save_height = 640, 480
 
 
@@ -94,7 +95,9 @@ def camera(queues, cap_path, frequence, worker_num, lock):
         common.camera(queues, cap, frequence, worker_num, lock)
 
 
-def detect(imgsz1, imgsz2, model1, model2, queue1, queue2, timeout):
+def detect(imgsz1, imgsz2, queue1, queue2, timeout):
+    model1 = YOLO(model_2_path, task='detect')
+    model2 = YOLO(model_3_path, task='detect')
     global flag
     while flag:
         try:
@@ -164,24 +167,25 @@ def track(queues, queue_, worker_num, timeout, lock):
                 break
 
 
-def save(queue, cap_path, frequence, lock):
-    cap = cv2.VideoCapture(cap_path)
+def save(save_frame_queue, lock):
     fourcc = cv2.VideoWriter.fourcc(*'XVID')
-    out = cv2.VideoWriter(f'output/{cv2.getTickCount()}.avi', fourcc, 30,
+    out = cv2.VideoWriter(f'output/{now_time}/{cv2.getTickCount()}.avi', fourcc, 30,
                           (save_width, save_height))
     global save_flag
     while save_flag:
         lock.acquire()
-        print('save', queue.qsize())
+        print('save', save_frame_queue.qsize())
         lock.release()
-
-        time.sleep(1 / frequence)
-        if queue.qsize() > 0:
-            out.write(queue.get())
+        try:
+            out.write(save_frame_queue.get(timeout=timeout))
+        except queue.Empty:
+            break
     out.release()
 
 
 if __name__ == '__main__':
+    now_time = cv2.getTickCount()
+    os.makedirs(f'output/{now_time}')
 
     # 视频流队列
     detect_queues = [queue.Queue(maxsize=50) for i in range(worker_num)]
@@ -196,14 +200,12 @@ if __name__ == '__main__':
     t1.start()
 
     # ai检测视频帧线程
-    models = [(YOLO(model_2_path, task='detect'), YOLO(model_3_path, task='detect'))
-              for i in range(worker_num)]
     tasks = [threading.Thread(target=detect,
                               args=(
-                                  imgsz1, imgsz2, i[0], i[1], detect_queues[idx], track_queues[idx],
+                                  imgsz1, imgsz2, detect_queues[idx], track_queues[idx],
                                   timeout
                               ))
-             for idx, i in enumerate(models)]
+             for idx in range(worker_num)]
     for i in tasks:
         i.start()
 
@@ -213,7 +215,7 @@ if __name__ == '__main__':
 
     # 保存视频帧线程
     save_flag = True
-    t3 = threading.Thread(target=save, args=(save_queue, cap_path, frequence, lock))
+    t3 = threading.Thread(target=save, args=(save_queue, lock))
     t3.start()
 
     # 主进程显示视频帧

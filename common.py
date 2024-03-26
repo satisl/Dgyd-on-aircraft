@@ -3,6 +3,7 @@ import time
 import numpy as np
 import math
 from ultralytics.utils.plotting import Annotator
+import queue
 
 
 def plot(double_digits, xywhs, image, coefficient=0.005):
@@ -142,17 +143,14 @@ def detect_5(imgsz, model, imgs, _s, conf, iou):
                 # 根据三角头和双位数相对位置得出双位数数值
                 delta_y = xys[0][0][1] - xys[1][0][1]
                 delta_x = xys[0][0][0] - xys[1][0][0]
-                if delta_x != 0:
-                    sita = math.atan(delta_y / delta_x)
-                else:
-                    sita = math.pi if delta_y > 0 else -math.pi
+                sita = math.atan(delta_y / (delta_x + 0.01))
 
-                x_0 = (xys[0][0][0] - xy[0]) * math.cos(sita) - (xys[0][0][1] - xy[1]) * math.sin(sita)
-                x_1 = (xys[1][0][0] - xy[0]) * math.cos(sita) - (xys[1][0][1] - xy[1]) * math.sin(sita)
-                y_0 = (xys[0][0][0] - xy[0]) * math.sin(sita) + (xys[0][0][1] - xy[1]) * math.cos(sita)
+                x_0 = (xys[0][0][0] - xy[0]) * math.cos(sita) + (xys[0][0][1] - xy[1]) * math.sin(sita)
+                x_1 = (xys[1][0][0] - xy[0]) * math.cos(sita) + (xys[1][0][1] - xy[1]) * math.sin(sita)
+                y_0 = (xys[0][0][0] - xy[0]) * math.sin(sita) - (xys[0][0][1] - xy[1]) * math.cos(sita)
 
                 xywhs.append(_)
-                if (x_0 - x_1) * y_0 < 0:
+                if (x_0 - x_1) * y_0 > 0:
                     clss.append(f'{int(xys[0][1])}{int(xys[1][1])}')
                 else:
                     clss.append(f'{int(xys[1][1])}{int(xys[0][1])}')
@@ -182,3 +180,42 @@ def camera(queues, cap, frequence, worker_num, lock):
     lock.acquire()
     print('detect_total', num)
     lock.release()
+
+def show(queues, queue1, frequence, worker_num, lock, timeout):
+    # 主进程cv2.imshow窗口
+    cv2.namedWindow('0', cv2.WINDOW_AUTOSIZE)
+    fps = 0
+    frames_num = 0
+    fps_update_before = cv2.getTickCount()
+    show_flag = True
+
+    while show_flag:
+        time.sleep(1 / frequence)
+        for i in range(worker_num):
+            num = 0
+            for j in range(worker_num):
+                num += queues[j].qsize()
+            lock.acquire()
+            print('show_total', num)
+            lock.release()
+
+            try:
+                frame = queues[i].get(timeout=timeout)
+            except queue.Empty:
+                show_flag = False
+                break
+            frames_num += 1
+            frame = update_fps(frame, fps)  # 附上fps
+            cv2.imshow('0', frame)
+            queue1.put(frame)  # 添加至视频保存队列
+
+            # fps计算
+            if frames_num > 60:
+                fps = frames_num / ((cv2.getTickCount() - fps_update_before) / cv2.getTickFrequency())
+                frames_num = 0
+                fps_update_before = cv2.getTickCount()
+
+        # 检测到q，关闭窗口和所有进程
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            cv2.destroyAllWindows()
+            show_flag = False

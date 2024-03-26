@@ -5,6 +5,7 @@ import threading
 from ultralytics.utils.plotting import Annotator
 import queue
 import common
+import time
 
 model_4_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\4_400dataset_imgsz640_v8n_SGD\weights\best.engine'
 model_5_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\5_1100dataset_imgsz160_v8n_Adam\weights\best.engine'
@@ -144,7 +145,7 @@ if __name__ == '__main__':
     # 视频流队列
     input_queues = [queue.Queue(maxsize=50) for i in range(worker_num)]
     show_queues = [queue.Queue() for i in range(worker_num)]
-    save_frame_queue = queue.Queue()
+    save_queue = queue.Queue()
 
     flag = True
     lock = threading.Lock()
@@ -165,45 +166,12 @@ if __name__ == '__main__':
 
     # 保存视频帧线程
     save_flag = True
-    t3 = threading.Thread(target=save, args=(save_frame_queue, lock))
+    t3 = threading.Thread(target=save, args=(save_queue, lock))
     t3.start()
 
-    # 主进程cv2.imshow窗口
-    cv2.namedWindow('0', cv2.WINDOW_AUTOSIZE)
-    fps = 0
-    frames_num = 0
-    fps_update_before = cv2.getTickCount()
-    show_flag = True
+    # 主线程展示视频帧
+    common.show(show_queues, save_queue, frequence, worker_num, lock, timeout)
 
-    while show_flag:
-        for i in range(worker_num):
-            num = 0
-            for j in range(worker_num):
-                num += show_queues[j].qsize()
-            lock.acquire()
-            # print(f'show:{i}', show_queues[i].qsize())
-            print('show_total', num)
-            lock.release()
-
-            try:
-                frame = show_queues[i].get(timeout=timeout)
-            except queue.Empty:
-                show_flag = False
-                break
-            frames_num += 1
-            frame = common.update_fps(frame, fps)  # 附上fps
-            cv2.imshow('0', frame)
-            save_frame_queue.put(frame)  # 添加至视频保存队列
-
-            # fps计算
-            if frames_num > 60:
-                fps = frames_num / ((cv2.getTickCount() - fps_update_before) / cv2.getTickFrequency())
-                frames_num = 0
-                fps_update_before = cv2.getTickCount()
-
-        # 检测到q，关闭窗口和所有进程
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            show_flag = False
     # 关闭各个线程
     flag = False
     t1.join()
@@ -213,7 +181,7 @@ if __name__ == '__main__':
         i.join()
     print('ai检测线程关闭')
     while True:
-        if save_frame_queue.empty():
+        if save_queue.empty():
             save_flag = False
             t3.join()
             print('视频保存线程关闭')
