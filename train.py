@@ -7,19 +7,20 @@ project_name = 'yolov8'
 
 class_ = '5'
 dataset_name = fr'D:\Double-digit-yolo-detection-on-aircraft\datasets\{class_}\{class_}.yaml'
-imgsz = 128
-optimizer = 'Adam'
-model_name = f'{class_}_1100dataset_imgsz{imgsz}_v8n_{optimizer}'
-batchsz = 500  # 96:500 160:300
+imgsz = 160
+optimizer = 'SGD'
+model_name = f'{class_}_1100dataset_imgsz{imgsz}_v8n_{optimizer}_no-aug'
+batchsz = -1  # 96:500 160:300
 
 if __name__ == '__main__':
     # train and val
-    model = YOLO(r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\5_700dataset_imgsz160_v8n_Adam\weights\best.pt')
-    model.train(data=dataset_name, epochs=1000,
+    model = YOLO(r'yolov8/5_1100dataset_imgsz160_v8n_Adam_no-aug/weights/best.pt')
+    model.train(data=dataset_name, epochs=2000,
                 imgsz=imgsz, batch=batchsz, cache='disk',
                 pretrained=True, optimizer=optimizer,
                 amp=True, fliplr=0,
-                val=True, save_period=50, patience=50,
+                val=True, save_period=50, patience=
+                200,
                 name=model_name, project=project_name,
                 verbose=True)
 

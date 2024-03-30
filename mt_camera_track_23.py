@@ -144,7 +144,7 @@ def track(queues, queue_, worker_num, timeout, lock):
                 frame, bbox = queues[i].get(timeout=timeout)
                 # 对目标靶子画框
                 if bbox is not None:
-                    tracker = cv2.legacy.TrackerCSRT.create()
+                    tracker = cv2.legacy.TrackerKCF.create()
                     tracker.init(frame, (bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1]))
                     frame = plot(target_num, bbox, frame)
 

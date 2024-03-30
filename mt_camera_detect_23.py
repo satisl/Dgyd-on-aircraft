@@ -1,5 +1,4 @@
 import os
-import time
 from ultralytics import YOLO
 import math
 import numpy as np
@@ -7,7 +6,7 @@ import cv2
 import threading
 import queue
 import common
-from common import detect_2, detect_3, update_fps, text
+from common import detect_2, detect_3, text
 
 model_2_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\2_400dataset_imgsz640_v8n_SGD\weights\best.engine'
 model_3_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\3_1100dataset_imgsz96_v8n_SGD\weights\best.engine'
@@ -20,7 +19,7 @@ iou = 0.5
 # cap_path = 0
 cap_path = r'E:\desktop\456_test\benchmark\far far distance.mp4'
 # cap_path = 'rtsp://admin:12345@192.168.10.240:8554/live'
-frequence = 250
+frequence = 20
 worker_num = 10
 timeout = 3
 detected_frames_frequence = 10
@@ -147,9 +146,9 @@ def save(save_frame_queue, lock):
                           (save_width, save_height))
     global save_flag
     while save_flag:
-        lock.acquire()
-        print('save', save_frame_queue.qsize())
-        lock.release()
+        # lock.acquire()
+        # print('save', save_frame_queue.qsize())
+        # lock.release()
         try:
             out.write(save_frame_queue.get(timeout=timeout))
         except queue.Empty:

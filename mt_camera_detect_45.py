@@ -5,7 +5,6 @@ import threading
 from ultralytics.utils.plotting import Annotator
 import queue
 import common
-import time
 
 model_4_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\4_400dataset_imgsz640_v8n_SGD\weights\best.engine'
 model_5_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\5_1100dataset_imgsz160_v8n_Adam\weights\best.engine'
@@ -15,7 +14,7 @@ imgsz2 = 160
 conf = 0.5
 iou = 0.5
 # cap_path = 0
-cap_path = r'E:\desktop\456_test\benchmark\far far distance.mp4'
+cap_path = r'E:\desktop\456_test\benchmark\quick moving.mp4'
 # cap_path = 'rtsp://admin:12345@192.168.10.240:8554/live'
 frequence = 18
 worker_num = 5
