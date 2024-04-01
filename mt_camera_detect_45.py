@@ -21,23 +21,6 @@ detected_frames_frequence = 10
 save_width, save_height = 640, 480
 
 
-def from_4_to_5(xywhs, image):
-    imgs = []
-    for x, y, w, h in xywhs:
-        # 截取靶子
-        w *= coefficient
-        h *= coefficient
-        top = int(y - h) if int(y - h) > 0 else 0
-        bottom = int(y + h) if int(y + h) < image.shape[0] else image.shape[0]
-        left = int(x - w) if int(x - w) > 0 else 0
-        right = int(x + w) if int(x + w) < image.shape[1] else image.shape[1]
-
-        cropped_img = image[top:bottom, left:right]
-        imgs.append(cropped_img)
-
-    return imgs
-
-
 def camera(queues, cap_path, frequence, worker_num, lock):
     cap = cv2.VideoCapture(cap_path)
     global flag
@@ -45,7 +28,7 @@ def camera(queues, cap_path, frequence, worker_num, lock):
         common.camera(queues, cap, frequence, worker_num, lock)
 
 
-def main(imgsz1, imgsz2, queue1, queue2, lock, detected_frames_frequence, timeout):
+def detect(imgsz1, imgsz2, queue1, queue2, lock, detected_frames_frequence, timeout):
     model1 = YOLO(model_4_path, task='detect')
     model2 = YOLO(model_5_path, task='detect')
     coefficient1 = 1.1
@@ -100,6 +83,23 @@ def main(imgsz1, imgsz2, queue1, queue2, lock, detected_frames_frequence, timeou
             print('ai检测子线程关闭')
             lock.release()
             break
+
+
+def from_4_to_5(xywhs, image):
+    imgs = []
+    for x, y, w, h in xywhs:
+        # 截取靶子
+        w *= coefficient
+        h *= coefficient
+        top = int(y - h) if int(y - h) > 0 else 0
+        bottom = int(y + h) if int(y + h) < image.shape[0] else image.shape[0]
+        left = int(x - w) if int(x - w) > 0 else 0
+        right = int(x + w) if int(x + w) < image.shape[1] else image.shape[1]
+
+        cropped_img = image[top:bottom, left:right]
+        imgs.append(cropped_img)
+
+    return imgs
 
 
 def show(queues, queue1, frequence, worker_num, lock, timeout):
@@ -177,7 +177,7 @@ if __name__ == '__main__':
     # ai检测视频帧线程
     detected_frames_num = 0
     detected_digits = [[i, 0] for i in range(100)]  # 检测结果储存处
-    tasks = [threading.Thread(target=main,
+    tasks = [threading.Thread(target=detect,
                               args=(
                                   imgsz1, imgsz2, input_queues[idx], show_queues[idx], lock,
                                   detected_frames_frequence, timeout
