@@ -93,16 +93,14 @@ def main(imgsz1, imgsz2, queue1, queue2, lock, detected_frames_frequence, timeou
             # 截取靶子中双位数图片，并根据靶子中三角位置与双位数位置计算旋转角度，旋转截取图片，获取旋转后图片以及对应双位数位置
             rotated_imgs, xywhs, xywhs_ = from_2_to_3(locaters, digits, frame)
 
-            # 识别旋转后图片上两单位数的数值，并合并为双位数数值
-            double_digits, xywhs_zipped = detect_3(imgsz2, model2, rotated_imgs, zip(xywhs, xywhs_), conf, iou)
-
-            # 对双位数和三角画框(第一模型检测结果),对靶子整体画框（算法配对结果），debug用
-            # frame = common.plot(['locater' for i in range(len(locaters))], locaters, frame)
-            # frame = common.plot(['digit' for i in range(len(digits))], digits, frame)
+            # 对靶子整体画框，检测双位数，三角头检测及配对效果
             xyxys = [(min(x1 - w1, x2 - w2), min(y1 - h1, y2 - h2), max(x1 + w1, x2 + w2), max((y1 + h1, y2 + h2))) for
-                     (x1, y1, w1, h1), (x2, y2, w2, h2) in xywhs_zipped]
+                     (x1, y1, w1, h1), (x2, y2, w2, h2) in zip(xywhs, xywhs_)]
             for x1, y1, x2, y2 in xyxys:
                 cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+
+            # 识别旋转后图片上两单位数的数值，并合并为双位数数值
+            double_digits, xywhs = detect_3(imgsz2, model2, rotated_imgs, xywhs, conf, iou)
 
             # 根据双位数位置以及数值画框并标记数值
             bounded_image = common.plot(double_digits, xywhs, frame)

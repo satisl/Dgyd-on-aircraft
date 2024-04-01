@@ -99,26 +99,28 @@ def save(image_name, masks, clss, names):
         json.dump(json_data, f, indent=2)
 
 
-labels_path = r'E:\desktop\test\label'
-images_path = r"E:\desktop\test\image"
+labels_path = r'E:\desktop\test\labels'
+images_path = r"E:\desktop\test\images"
 
 show_width = 640
 show_height = 480
 
 # segment anything
-overrides = dict(conf=0.25, task='segment', mode='predict', imgsz=1024, model='other/mobile_sam.pt', verbose=False,
+overrides = dict(conf=0.25, task='segment', mode='predict', imgsz=1024, model='other/sam_b.pt', verbose=False,
                  save=False)
 predictor = SAMPredictor(overrides=overrides)
+print('sam部署完毕')
 
 # yolo
 # detect_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\4_400dataset_imgsz640_v8n_SGD\weights\best.engine'
 # yolo_model = YOLO(detect_path, task='detect')
 # conf = 0.5
 # iou = 0.5
+# print('yolo部署完毕')
 
 # grounding dino
-GROUNDING_DINO_CONFIG_PATH = "other/GroundingDINO_SwinT_OGC.py"
-GROUNDING_DINO_CHECKPOINT_PATH = "other/groundingdino_swint_ogc.pth"
+GROUNDING_DINO_CONFIG_PATH = "other/GroundingDINO_SwinB_cfg.py"
+GROUNDING_DINO_CHECKPOINT_PATH = "other/groundingdino_swinb_cogcoor.pth"
 
 grounding_dino_model = Model(model_config_path=GROUNDING_DINO_CONFIG_PATH,
                              model_checkpoint_path=GROUNDING_DINO_CHECKPOINT_PATH)
@@ -127,8 +129,8 @@ BOX_THRESHOLD = 0.25
 TEXT_THRESHOLD = 0.25
 NMS_THRESHOLD = 0.1
 
-CLASSES = ["small colored digit"]
-print(CLASSES)
+CLASSES = ["cute girl"]
+print('grounding dino部署完毕')
 
 frames_num = 0
 pre_time = cv2.getTickCount()

@@ -1,6 +1,5 @@
 import cv2
 import time
-import numpy as np
 import math
 from ultralytics.utils.plotting import Annotator
 import queue
@@ -18,11 +17,10 @@ def plot(double_digits, xywhs, image, coefficient=0.005):
     return annotator.im
 
 
-def text(img, width, detected_digits, lock, font=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1.5, font_thickness=2):
+def text(img, detected_digits, font=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1.5, font_thickness=2):
     # 右上角显示已检测双位数次数
-    lock.acquire()
     dgs = sorted(detected_digits, reverse=True, key=lambda i: i[1])
-    lock.release()
+    width = img.shape[1]
     for i, j in enumerate(dgs[:4]):
         dg_text = f'{j[0]}:{j[1]}'
         dg_text_width, dg_text_height = cv2.getTextSize(dg_text, font, font_scale, font_thickness)[0]
@@ -33,7 +31,7 @@ def text(img, width, detected_digits, lock, font=cv2.FONT_HERSHEY_SIMPLEX, font_
                     font_thickness)
 
     # 右上角显示已检测三个双位数的中位数
-    dg_text = sorted(dgs[:3], key=lambda i: int(i[0]))[1][0]
+    dg_text = str(sorted(dgs[:3], key=lambda i: i[0])[1][0])
     dg_text_width, dg_text_height = cv2.getTextSize(dg_text, font, font_scale, font_thickness)[0]
     dg_text_x, dg_text_y = int(width - dg_text_width), int(5 * dg_text_height * 2)
     cv2.putText(img, dg_text, (dg_text_x, dg_text_y), font,
@@ -44,26 +42,26 @@ def text(img, width, detected_digits, lock, font=cv2.FONT_HERSHEY_SIMPLEX, font_
     return img
 
 
-def concatenate(img, rotated_imgs, height, image_for_concat, image_for_concat_update_before):
-    channel = img.shape[2]
-    if image_for_concat is None:
-        image_for_concat = np.zeros((height, height // 4, channel), np.uint8)
-    else:
-        if (cv2.getTickCount() - image_for_concat_update_before) \
-                / cv2.getTickFrequency() > 1:
-            resized_imgs = [cv2.resize(i, (height // 4, height // 4)) for i in rotated_imgs[:4]]
-            if len(resized_imgs) != 0:
-                image = resized_imgs[0]
-                for i in range(4):
-                    if i + 1 < len(resized_imgs):
-                        image = np.vstack((image, resized_imgs[i + 1]))
-                image_for_concat = np.vstack(
-                    (image,
-                     np.zeros((height - image.shape[0], height // 4, channel), np.uint8)))
-                image_for_concat_update_before = cv2.getTickCount()
-
-    concatenated_image = np.concatenate([img, image_for_concat], axis=1)
-    return concatenated_image, image_for_concat, image_for_concat_update_before
+# def concatenate(img, rotated_imgs, height, image_for_concat, image_for_concat_update_before):
+#     channel = img.shape[2]
+#     if image_for_concat is None:
+#         image_for_concat = np.zeros((height, height // 4, channel), np.uint8)
+#     else:
+#         if (cv2.getTickCount() - image_for_concat_update_before) \
+#                 / cv2.getTickFrequency() > 1:
+#             resized_imgs = [cv2.resize(i, (height // 4, height // 4)) for i in rotated_imgs[:4]]
+#             if len(resized_imgs) != 0:
+#                 image = resized_imgs[0]
+#                 for i in range(4):
+#                     if i + 1 < len(resized_imgs):
+#                         image = np.vstack((image, resized_imgs[i + 1]))
+#                 image_for_concat = np.vstack(
+#                     (image,
+#                      np.zeros((height - image.shape[0], height // 4, channel), np.uint8)))
+#                 image_for_concat_update_before = cv2.getTickCount()
+#
+#     concatenated_image = np.concatenate([img, image_for_concat], axis=1)
+#     return concatenated_image, image_for_concat, image_for_concat_update_before
 
 
 def detect_2(imgsz, model, img, conf, iou):
@@ -88,7 +86,7 @@ def detect_2(imgsz, model, img, conf, iou):
 def detect_3(imgsz, model, rotated_imgs, _s, conf, iou):
     double_digits = []
     __s = []
-    for rotated_img, _ in zip(rotated_imgs, _s):
+    for rotated_img, __ in zip(rotated_imgs, _s):
         # 检测旋转后靶子，具体获取双位数数值
         results = model.predict(source=rotated_img, imgsz=imgsz, half=True, device='cuda:0',
                                 save=False, conf=conf, iou=iou, verbose=False)
@@ -98,12 +96,12 @@ def detect_3(imgsz, model, rotated_imgs, _s, conf, iou):
         cls = r.boxes.cls.tolist()
 
         if len(xywh) == 2:
-            if xywh[0][0] < xywh[1][0]:
+            if (xywh[0][0] - xywh[1][0]) < 0:
                 double_digit = str(int(cls[0])) + str(int(cls[1]))
             else:
                 double_digit = str(int(cls[1])) + str(int(cls[0]))
             double_digits.append(double_digit)
-            __s.append(_)
+            __s.append(__)
     return double_digits, __s
 
 
@@ -158,6 +156,16 @@ def detect_5(imgsz, model, imgs, _s, conf, iou):
     return clss, xywhs
 
 
+def detect_7(imgsz, model, img, conf, iou):
+    results = model.predict(source=img, imgsz=imgsz, half=True, device='cuda:0',
+                            save=False, conf=conf, iou=iou, verbose=False)
+    r = results[0]
+    xywhr = r.obb.xywhr.cpu().tolist()
+    xyxy = r.obb.xyxy.cpu().tolist()
+    xyxyxyxy = r.obb.xyxyxyxy.cpu().tolist()
+    return xywhr, xyxy, xyxyxyxy
+
+
 def update_fps(img, fps, font=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1, font_thickness=2):
     # 左上角显示FPS
     cv2.putText(img, f'FPS:{fps:.2f}', (10, 30), font, font_scale, (0, 0, 255), font_thickness)
@@ -182,41 +190,4 @@ def camera(queues, cap, frequence, worker_num, lock):
     lock.release()
 
 
-def show(queues, queue1, frequence, worker_num, lock, timeout):
-    # 主进程cv2.imshow窗口
-    cv2.namedWindow('0', cv2.WINDOW_AUTOSIZE)
-    fps = 0
-    frames_num = 0
-    fps_update_before = cv2.getTickCount()
-    show_flag = True
 
-    while show_flag:
-        time.sleep(1 / frequence)
-        for i in range(worker_num):
-            num = 0
-            for j in range(worker_num):
-                num += queues[j].qsize()
-            lock.acquire()
-            print('show_total', num)
-            lock.release()
-
-            try:
-                frame = queues[i].get(timeout=timeout)
-            except queue.Empty:
-                show_flag = False
-                break
-            frames_num += 1
-            frame = update_fps(frame, fps)  # 附上fps
-            cv2.imshow('0', frame)
-            queue1.put(frame)  # 添加至视频保存队列
-
-            # fps计算
-            if frames_num > 60:
-                fps = frames_num / ((cv2.getTickCount() - fps_update_before) / cv2.getTickFrequency())
-                frames_num = 0
-                fps_update_before = cv2.getTickCount()
-
-        # 检测到q，关闭窗口和所有进程
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            cv2.destroyAllWindows()
-            show_flag = False

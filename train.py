@@ -5,24 +5,23 @@ from PIL import Image
 
 project_name = 'yolov8'
 
-class_ = '5'
+class_ = '7'
 dataset_name = fr'D:\Double-digit-yolo-detection-on-aircraft\datasets\{class_}\{class_}.yaml'
-imgsz = 160
+imgsz = 640
 optimizer = 'SGD'
-model_name = f'{class_}_1100dataset_imgsz{imgsz}_v8n_{optimizer}_no-aug'
+model_name = f'{class_}_400dataset_imgsz{imgsz}_v8n_{optimizer}'
 batchsz = -1  # 96:500 160:300
+task = 'obb'
 
 if __name__ == '__main__':
     # train and val
-    model = YOLO(r'yolov8/5_1100dataset_imgsz160_v8n_Adam_no-aug/weights/best.pt')
-    model.train(data=dataset_name, epochs=2000,
+    model = YOLO('yolov8n-obb.yaml')
+    model.train(data=dataset_name, epochs=1000, verbose=True,
                 imgsz=imgsz, batch=batchsz, cache='disk',
-                pretrained=True, optimizer=optimizer,
-                amp=True, fliplr=0,
-                val=True, save_period=50, patience=
-                200,
-                name=model_name, project=project_name,
-                verbose=True)
+                pretrained=False, optimizer=optimizer,
+                amp=True, val=True, save_period=50, patience=
+                100, name=model_name, project=project_name,
+                fliplr=0)
 
     # model = YOLO('yolov8/123_imgsz1280_v8n_Adam/weights/last.pt')
     # model.train(resume=True)
@@ -55,7 +54,7 @@ if __name__ == '__main__':
 
         # 合并各个epoch模型val出来的F1_curve,P_curve,PR_curve,R_curve图
         for id2, j in enumerate(metrics):
-            image.paste(Image.open(f'{os.getcwd()}/runs/detect/{model_name}--{i[:-3]}/{j}'), (id2 * width, 0))
+            image.paste(Image.open(f'{os.getcwd()}/runs/{task}/{model_name}--{i[:-3]}/{j}'), (id2 * width, 0))
 
         image.save(f'{project_name}/{model_name}/{i[:-3]}_test.png')
 
@@ -72,8 +71,8 @@ if __name__ == '__main__':
     # 合并各个epoch模型val出来的confusion_matrix
     for idx, i in enumerate(ckpt):
         img = Image.new("RGB", (2 * width, height), "white")
-        img.paste(Image.open(f'{os.getcwd()}/runs/detect/{model_name}--{i[:-3]}/confusion_matrix.png'), (0, 0))
-        img.paste(Image.open(f'{os.getcwd()}/runs/detect/{model_name}--{i[:-3]}/confusion_matrix_normalized.png'),
+        img.paste(Image.open(f'{os.getcwd()}/runs/{task}/{model_name}--{i[:-3]}/confusion_matrix.png'), (0, 0))
+        img.paste(Image.open(f'{os.getcwd()}/runs/{task}/{model_name}--{i[:-3]}/confusion_matrix_normalized.png'),
                   (width, 0))
         image.paste(img, (0, idx * height))
     image.save(f'{project_name}/{model_name}/total_confusion_matrix.png')
