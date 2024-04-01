@@ -116,7 +116,7 @@ def detect_4(imgsz, model, img, conf, iou):
 
 
 def detect_5(imgsz, model, imgs, _s, conf, iou):
-    xywhs = []
+    __s = []
     clss = []
     for img, _ in zip(imgs, _s):
         # 检测旋转后靶子，具体获取双位数数值
@@ -138,6 +138,7 @@ def detect_5(imgsz, model, imgs, _s, conf, iou):
                     xys.append((j[:2], i))
 
             if xy is not None and len(xys) == 2:
+                __s.append(_)
                 # 根据三角头和双位数相对位置得出双位数数值
                 delta_y = xys[0][0][1] - xys[1][0][1]
                 delta_x = xys[0][0][0] - xys[1][0][0]
@@ -147,13 +148,12 @@ def detect_5(imgsz, model, imgs, _s, conf, iou):
                 x_1 = (xys[1][0][0] - xy[0]) * math.cos(sita) + (xys[1][0][1] - xy[1]) * math.sin(sita)
                 y_0 = (xys[0][0][0] - xy[0]) * math.sin(sita) - (xys[0][0][1] - xy[1]) * math.cos(sita)
 
-                xywhs.append(_)
                 if (x_0 - x_1) * y_0 > 0:
                     clss.append(f'{int(xys[0][1])}{int(xys[1][1])}')
                 else:
                     clss.append(f'{int(xys[1][1])}{int(xys[0][1])}')
 
-    return clss, xywhs
+    return clss, __s
 
 
 def detect_7(imgsz, model, img, conf, iou):
@@ -188,6 +188,3 @@ def camera(queues, cap, frequence, worker_num, lock):
     lock.acquire()
     print('detect_total', num)
     lock.release()
-
-
-

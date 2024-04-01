@@ -30,7 +30,7 @@ def camera(queues, cap_path, frequence, worker_num, lock):
         common.camera(queues, cap, frequence, worker_num, lock)
 
 
-def main(imgsz1, imgsz2, queue1, queue2, lock, detected_frames_frequence, timeout):
+def detect(imgsz1, imgsz2, queue1, queue2, lock, detected_frames_frequence, timeout):
     model1 = YOLO(model_7_path, task='obb')
     model2 = YOLO(model_5_path, task='detect')
     global flag, detected_frames_num
@@ -199,7 +199,7 @@ if __name__ == '__main__':
     # ai检测视频帧线程
     detected_frames_num = 0
     detected_digits = [[i, 0] for i in range(100)]  # 检测结果储存处
-    tasks = [threading.Thread(target=main,
+    tasks = [threading.Thread(target=detect,
                               args=(
                                   imgsz1, imgsz2, input_queues[idx], show_queues[idx], lock,
                                   detected_frames_frequence, timeout
