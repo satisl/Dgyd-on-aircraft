@@ -8,7 +8,8 @@ import time
 
 model_4_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\4_400dataset_imgsz640_v8n_SGD\weights\best.engine'
 model_5_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\5_1100dataset_imgsz160_v8n_Adam\weights\best.engine'
-coefficient = 0.6  # 标记靶子范围影响系数
+coefficient = 0.6  # 截取靶子范围影响系数
+coefficient1 = 1.1  # 标记靶子范围影响系数
 imgsz1 = 640
 imgsz2 = 160
 conf = 0.5
@@ -31,7 +32,7 @@ def camera(queues, cap_path, frequence, worker_num, lock):
 def detect(imgsz1, imgsz2, queue1, queue2, lock, detected_frames_frequence, timeout):
     model1 = YOLO(model_4_path, task='detect')
     model2 = YOLO(model_5_path, task='detect')
-    coefficient1 = 1.1
+
     global flag, detected_frames_num
     while flag:
         try:

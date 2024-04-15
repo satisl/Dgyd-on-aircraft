@@ -8,14 +8,14 @@ import common
 from ultralytics.utils.plotting import Annotator
 import time
 
-model_7_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\7_400dataset_imgsz640_v8n_SGD\weights\best.engine'
-model_5_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\5_1100dataset_imgsz160_v8n_Adam\weights\best.engine'
+model_7_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\7_400dataset_imgsz640_v8n_SGD\weights\best.onnx'
+model_5_path = r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\5_1100dataset_imgsz160_v8n_Adam\weights\best.onnx'
 coefficient1 = 1.2  # 靶子截取范围系数
 imgsz1 = 640
 imgsz2 = 160
 conf = 0.5
 iou = 0.5
-cap_path = r'E:\desktop\456_test\benchmark\quick moving.mp4'
+cap_path = 1
 frequence = 20
 worker_num = 10
 timeout = 3
