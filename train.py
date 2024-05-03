@@ -1,11 +1,11 @@
-import time
+import gc
 from ultralytics import YOLO
 import os
 from PIL import Image
 
 project_name = 'yolov8'
 
-class_ = '7'
+class_ = 'obb'
 dataset_name = fr'D:\Double-digit-yolo-detection-on-aircraft\datasets\{class_}\{class_}.yaml'
 imgsz = 640
 optimizer = 'SGD'
@@ -14,20 +14,22 @@ batchsz = -1  # 96:500 160:300
 task = 'obb'
 
 if __name__ == '__main__':
-    # train and val
+    # # train and val
     model = YOLO('yolov8n-obb.yaml')
-    model.train(data=dataset_name, epochs=1000, verbose=True,
+    model.train(data=dataset_name, epochs=50, verbose=True,
                 imgsz=imgsz, batch=batchsz, cache='disk',
                 pretrained=False, optimizer=optimizer,
                 amp=True, val=True, save_period=50, patience=
                 100, name=model_name, project=project_name,
                 fliplr=0)
 
-    # model = YOLO('yolov8/123_imgsz1280_v8n_Adam/weights/last.pt')
-    # model.train(resume=True)
+    model = YOLO(
+        r'D:\Double-digit-yolo-detection-on-aircraft\yolov8\detect_400dataset_imgsz640_v8n_SGD/weights/last.pt')
+    model.train(resume=True)
 
     del model
-    time.sleep(60)
+    gc.collect()
+
 
     # 用训练保存的各个epoch的模型val一遍test集
 
@@ -45,10 +47,10 @@ if __name__ == '__main__':
     for id1, i in enumerate(ckpt):
 
         model = YOLO(f'{project_name}/{model_name}/weights/{i}')
-        model.val(data=dataset_name, split='test', imgsz=imgsz, batch=16, half=True,
+        model.val(data=dataset_name, split='test', imgsz=imgsz, batch=1, half=True,
                   plots=True, iou=0.5, name=f'{model_name}--{i[:-3]}')
         del model
-        time.sleep(60)
+        gc.collect()
 
         image = Image.new("RGB", (len(metrics) * width, height), "white")
 

@@ -1,6 +1,6 @@
 from ultralytics import YOLO
 
-imgsz = 640
-model = YOLO(r'D:\Double-digit-yolo-detection-on-aircraft\yolov8n.pt')
+imgsz = 160
+model = YOLO(r'./yolov8/5_1100dataset_imgsz160_v8n_Adam/weights/best.pt')
 
-model.export(format='engine', imgsz=imgsz, half=True)
+model.export(format='rknn', imgsz=imgsz, opset=19)
