@@ -2,9 +2,9 @@ import json
 import os
 import cv2
 
-img_path = r'D:\Double-digit-yolo-detection-on-aircraft\datasets\pose\origin\images'
-json_path = r'D:\Double-digit-yolo-detection-on-aircraft\datasets\pose\origin\json'
-txt_path = r'D:\Double-digit-yolo-detection-on-aircraft\datasets\pose\origin\labels'
+img_path = r''
+json_path = r''
+txt_path = r''
 
 for file in os.listdir(img_path):
     print(file)

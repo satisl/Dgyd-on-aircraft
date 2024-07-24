@@ -54,8 +54,8 @@ def draw_rectangles_and_points(image_path, data):
 
 # 主程序
 def main():
-    img_path = r'D:\Double-digit-yolo-detection-on-aircraft\datasets\pose\for trainning\images\train'
-    txt_path = r'D:\Double-digit-yolo-detection-on-aircraft\datasets\pose\for trainning\labels\train'
+    img_path = r''
+    txt_path = r''
     for file in os.listdir(img_path):
         # 读取数据
         data = read_data_from_file(f'{txt_path}/{file.rsplit(".", 1)[0]}.txt')

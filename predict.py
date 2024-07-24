@@ -8,82 +8,134 @@ import subprocess
 import cv2
 from ultralytics import YOLO
 from ultralytics.utils.plotting import Annotator
+import sys
+import numpy as np
 
-cap_path = "./benchmark/record2.mp4"
-# camera_frequence = 1 / 100  # 每几秒读取1帧
 maxsize = 20  # camera线程帧队列最大数量
 
-model_7_path = "./yolov8/obb_480dataset_imgsz640_v8n_SGD/weights/best.pt"
-model_5_path = "./yolov8/5_1100dataset_imgsz160_v8n_Adam/weights/best.pt"
 imgsz1 = 640
-imgsz2 = 160
-conf = 0.5
-iou = 0.5
-coefficient1 = 1.2  # 靶子截取范围系数
-worker_num = 8  # 同时开启work_num个detect线程
+model_path1 = (
+    r"./yolov8/obb_592dataset_imgsz640_v8n_SGD/weights/best.engine"
+)
+conf1 = 0.5
+iou1 = 0.2
 
-target_saving_per_frame = 1  # 每多少帧检测到靶子便保存靶子图片
-save_img_mode = "disk"  # 靶子图片保存模式 disk or email
-mail_mode = "netease"  # 邮箱设置
+imgsz2 = 160
+model_path2 = r"./yolov8/digits_1665dataset_imgsz160_v8n_Adam/weights/best.engine"
+conf2 = 0.5
+iou2 = 0.5
+
+coefficient1 = 1.2  # 靶子截取范围系数
+worker_num = 1  # 同时开启work_num个detect线程
+
+target_saving_per_frame = 100  # 每多少帧检测到靶子便保存靶子图片
 send_per_imgs = 100  # 每多少张靶子图片发送一次邮箱
 
-camera_width, camera_height = 1920, 1080  # camera的帧大小
-show_width, show_height = 1920, 1080  # show的帧大小
-save_width, save_height = 1280, 720  # save的帧大小
+camera_width, camera_height = 3840, 2160  # camera的帧大小
+crop_width, crop_height = 2160, 2160  # 裁切后的帧大小
+show_width, show_height = 1080, 1080  # show的帧大小
 fps_per_frames = 300  # 每几帧计算一次fps
-show_mode = "imshow"  # 预览模式 imshow, rtmp, rtsp, srt
-# rtsp 8554/mystream rtmp 1935/mystream
-# srt://127.0.0.1:88908890?streamid=publish:mystream&pkt_size=1316
-liveUrl = "rtmp://192.168.10.224:1935/video"
-preset = "medium"
+show_mode = "rtmp"  # 预览模式 imshow, rtmp, rtsp, srt
+liveUrl = "rtmp://127.0.0.1:1935/video"
+rc_mode = "AVBR"
+bitrate = "10M"
 live_fps = 30  # 直播流fps
-save_fps = 10  # 视频流fps
+save_per_frames = 10  # 每几个帧save一次
 
 count_frequence = 1  # 每几秒显示一次各队列数量
 
 timeout = 5
 
 
-def camera(queues, path):
-    cap = cv2.VideoCapture(path)
-    global flag
-    # t1 = time.time()
-    while cap.isOpened() and flag:
-        # sleep_time = frequence * worker_num - time.time() + t1
-        # t1 = time.time()
-        #
-        # lock.acquire()
-        # print(sleep_time)
-        # lock.release()
-        #
-        # if sleep_time > 0:
-        #     time.sleep(sleep_time)
+def letterbox(img, imgsz):
 
+    shape = img.shape[:2]  # current shape [height, width]
+
+    # Scale ratio (new / old)
+    r = min(imgsz / shape[0], imgsz / shape[1])
+
+    # Compute padding
+    new_unpad = int(round(shape[1] * r)), int(round(shape[0] * r))
+    dw, dh = imgsz - new_unpad[0], imgsz - new_unpad[1]  # wh padding
+
+    # divide padding into 2 sides
+    dw /= 2
+    dh /= 2
+
+    if shape[::-1] != new_unpad:
+        img = cv2.resize(img, new_unpad, interpolation=cv2.INTER_NEAREST)
+
+    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
+    left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
+    img = cv2.copyMakeBorder(
+        img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114)
+    )  # add border
+
+    return img
+
+
+def plot_polygon(img, pointss, texts, coefficient=0.006):
+    h, w = img.shape[:2]
+    for points, text in zip(pointss, texts):
+        points = np.array(points, dtype=np.int32)
+        points = points.reshape((-1, 1, 2))
+        cv2.polylines(
+            img,
+            [points],
+            isClosed=True,
+            color=(255, 0, 0),
+            thickness=int(min(h, w) * coefficient),
+        )
+        cv2.putText(
+            img,
+            text,
+            (np.min(points[:, :, 0]).item(), np.min(points[:, :, 1]).item() - 6),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            min(h, w) * coefficient,
+            (0, 0, 255),
+            2,
+        )
+
+    return img
+
+
+def camera(queues1, queue2):
+    frame_id = 0
+
+    delta_h, delta_w = camera_height - crop_height, camera_width - crop_width
+
+    global flag
+    while flag:
         for i in range(worker_num):
-            success, frame = cap.read()
-            if success:
-                queues[i].put(frame)
-            else:
-                cap.release()
+            raw_data = sys.stdin.buffer.read(
+                camera_width * camera_height * 3 // 2
+            )  # 假设视频帧大小为640x480，3个通道
+            if not raw_data:
                 break
-    # import numpy as np
-    # frame = cv2.imdecode(np.fromfile(r'', dtype=np.uint8),
-    #                      cv2.IMREAD_COLOR)
-    # while flag:
-    #     time.sleep(frequence)
-    #     for i in range(worker_num):
-    #         queues[i].put(frame.copy())
+
+            # 将原始数据转换为图像
+            frame = np.frombuffer(raw_data, dtype=np.uint8).reshape(
+                camera_height * 3 // 2, camera_width
+            )
+            frame = cv2.cvtColor(frame, cv2.COLOR_YUV2BGR_I420)
+            cropped_frame = frame[
+                delta_h // 2 : camera_height - delta_h // 2,  # 修正高度裁剪范围
+                delta_w // 2 : camera_width - delta_w // 2,  # 修正宽度裁剪范围
+            ]
+            queues1[i].put(cropped_frame)
+            if frame_id % save_per_frames == 0:
+                queue2.put(frame)
+            frame_id += 1
 
 
 class Detect:
     def __init__(self, queue1, queue2):
         self.queue1 = queue1
         self.queue2 = queue2
-        self.model1 = YOLO(model_7_path, task="obb")
-        self.model2 = YOLO(model_5_path, task="detect")
+        self.model1 = YOLO(model_path1, task="obb")
+        self.model2 = YOLO(model_path2, task="detect")
 
     def detect(self):
-
         global flag, target_num
         while flag:
             try:
@@ -121,9 +173,6 @@ class Detect:
                 # 根据双位数位置以及数值画框并标记数值
                 bounded_image = self.plot_polygon(double_digits, xyxyxyxys, frame)
 
-                # 检测后图片添加至队列
-                self.queue2.put(cv2.resize(bounded_image, (save_width, save_height)))
-
                 # 双位数检测次数计数
                 if len(double_digits) != 0:
                     lock.acquire()
@@ -132,11 +181,19 @@ class Detect:
                         detected_digits[idx][1] += 1
                     lock.release()
 
+                # 缓冲区帧数过多则丢帧
+                if self.queue2.qsize() > 40:
+                    continue
+                # 检测后图片添加至队列
+                self.queue2.put(bounded_image)
+
             except queue.Empty:
                 lock.acquire()
                 print("detect从camera获取帧超时")
                 lock.release()
+                time.sleep(1)
                 continue
+
         lock.acquire()
         print("detect子线程关闭")
         lock.release()
@@ -148,8 +205,8 @@ class Detect:
             half=True,
             device="cuda:0",
             save=False,
-            conf=conf,
-            iou=iou,
+            conf=conf1,
+            iou=iou1,
             verbose=False,
         )
         r = results[0]
@@ -158,11 +215,11 @@ class Detect:
         xyxyxyxy = r.obb.xyxyxyxy.cpu().tolist()
         return xywhr, xyxy, xyxyxyxy
 
-    def predict2(self, imgs, _s):
+    def predict2(self, imgs, xs1):
 
-        __s = []
+        xs2 = []
         clss = []
-        for idx, (img, _) in enumerate(zip(imgs, _s)):
+        for img, x in zip(imgs, xs1):
             clss.append("None")
             # 检测旋转后靶子，具体获取双位数数值
             results = self.model2.predict(
@@ -171,27 +228,25 @@ class Detect:
                 half=True,
                 device="cuda:0",
                 save=False,
-                conf=conf,
-                iou=iou,
+                conf=conf2,
+                iou=iou2,
                 verbose=False,
             )
 
             r = results[0]
-            xywh = r.boxes.xywh.tolist()
-            cls = r.boxes.cls.tolist()
-
-            if len(xywh) == 3:
+            xywhs = r.boxes.xywh.tolist()
+            classes = r.boxes.cls.tolist()
+            if len(classes) == 3:
                 xys = []
                 xy = None
                 # 拆分单位数和三角头
-                for i, j in zip(cls, xywh):
-                    if i == 10:
-                        xy = j[:2]
+                for cls, xywh in zip(classes, xywhs):
+                    if cls == 10:
+                        xy = xywh[:2]
                     else:
-                        xys.append((j[:2], i))
-
+                        xys.append((xywh[:2], cls))
                 if xy is not None and len(xys) == 2:
-                    __s.append(_)
+                    xs2.append(x)
                     # 根据三角头和双位数相对位置得出双位数数值
                     delta_y = xys[0][0][1] - xys[1][0][1]
                     delta_x = xys[0][0][0] - xys[1][0][0]
@@ -212,58 +267,59 @@ class Detect:
                     else:
                         clss[-1] = f"{int(xys[1][1])}{int(xys[0][1])}"
 
-        return clss, __s
+        return clss, xs2
 
-    def crop_and_rotate(self, xywhr, xyxy, image, width, height):
+    def crop_and_rotate(self, xywhr, xyxy, image, width, height, scale=1.0):
         rotated_imgs = []
-        for (x, y, _, _, r), (left, top, right, bottom) in zip(xywhr, xyxy):
+        for (x, y, rw, rh, r), (left, top, right, bottom) in zip(xywhr, xyxy):
             # 截取长宽
             w = right - left
             h = bottom - top
+
             left -= w * (coefficient1 - 1) / 2
             right += w * (coefficient1 - 1) / 2
             top -= h * (coefficient1 - 1) / 2
             bottom += h * (coefficient1 - 1) / 2
+
             left = left if left >= 0 else 0
             top = top if top >= 0 else 0
             right = right if right <= width else width
             bottom = bottom if bottom <= height else height
 
-            # 旋转角度
-            rad = r
-            degree = math.degrees(rad) + 90
-            rot_mat = cv2.getRotationMatrix2D((x - left, y - top), degree, 0.9)
+            w, h = int(right - left), int(bottom - top)
 
+            # 旋转角度
+            rad = r if rw < rh else r - 0.5 * math.pi
+            degree = math.degrees(rad)
+
+            nw = (abs(np.sin(rad) * h) + abs(np.cos(rad) * w)) * scale
+            nh = (abs(np.cos(rad) * h) + abs(np.sin(rad) * w)) * scale
+            rot_mat = cv2.getRotationMatrix2D((nw * 0.5, nh * 0.5), degree, scale)
+            rot_move = np.dot(rot_mat, np.array([(nw - w) * 0.5, (nh - h) * 0.5, 0]))
+            rot_mat[0, 2] += rot_move[0]
+            rot_mat[1, 2] += rot_move[1]
             # 图像处理
             cropped_img = image[int(top) : int(bottom), int(left) : int(right)]
             rotated_img = cv2.warpAffine(
                 cropped_img,
                 rot_mat,
-                (int(right - left), int(bottom - top)),
-                flags=cv2.INTER_LANCZOS4,
+                (int(math.ceil(nw)), int(math.ceil(nh))),
+                flags=cv2.INTER_LINEAR,
             )
             rotated_imgs.append(rotated_img)
         return rotated_imgs
 
-    def plot_polygon(self, double_digits, xyxyxyxys, image, coefficient=0.005):
+    def plot_polygon(self, double_digits, xyxyxyxys, image):
         # 在原图片上绘制框并标上具体双位数数值
-        h, w = image.shape[:2]
-        annotator = Annotator(image, line_width=int(min(w, h) * coefficient))
-        for dg, xyxyxyxy in zip(double_digits, xyxyxyxys):
-            annotator.box_label(xyxyxyxy, label=f"{dg}", rotated=True)
+        texts = [f"{dg}" for dg in double_digits]
+        img = plot_polygon(image, xyxyxyxys, texts, 0.001)
 
-        return annotator.im
+        return img
 
 
 class SaveImg:
     def __init__(self, queue1):
         self.queue1 = queue1
-
-    def save(self, mode):
-        if mode == "disk":
-            self.save_disk()
-        elif mode == "email":
-            self.save_email()
 
     def save_disk(self):
         global flag
@@ -272,7 +328,10 @@ class SaveImg:
                 t = time.time()
                 double_digits, rotated_imgs = self.queue1.get(timeout=timeout)
                 for idx, (digit, img) in enumerate(zip(double_digits, rotated_imgs)):
-                    cv2.imwrite(f"output/{now_time}/{t}-{idx}-[{digit}].jpg", img)
+                    cv2.imwrite(
+                        f"./output/{now_time}/{t}-{idx}-[{digit}].jpg",
+                        letterbox(img, imgsz2),
+                    )
             except queue.Empty:
                 lock.acquire()
                 print("save_img从detect2获取帧超时")
@@ -283,173 +342,20 @@ class SaveImg:
         print("save_img子线程关闭")
         lock.release()
 
-    def save_email(self):
-        import smtplib
-
-        if mail_mode == "netease":
-            from_email = ""
-            to_email = ""
-            smtp_server = "smtp.163.com"
-            smtp_port = 25
-            key = os.environ.get("smtp_netease_key")
-        else:
-            from_email = ""
-            to_email = ""
-            smtp_server = "smtp.qq.com"
-            smtp_port = 587
-            key = os.environ.get("smtp_qq_key")
-
-        infos = []
-        with smtplib.SMTP(smtp_server, smtp_port) as server:
-            server.starttls()
-            server.login(from_email, key)
-            global flag
-            while flag:
-                try:
-                    digits, imgs = self.queue1.get(timeout=timeout)
-                    all_None = all(
-                        digit == "None" for digit in digits
-                    )  # 筛选出更有可能的靶标截图
-                    if not all_None:
-                        infos.extend([_ for _ in zip(digits, imgs)])
-                    if len(infos) > send_per_imgs:
-                        msg = self.generate_email(infos, from_email, to_email)
-                        server.sendmail(from_email, to_email, msg.as_string())
-                        infos = []
-                except queue.Empty:
-                    lock.acquire()
-                    print("save_img从detect2获取帧超时")
-                    lock.release()
-                    continue
-            if len(infos) > 0:
-                msg = self.generate_email(infos, from_email, to_email)
-                server.sendmail(from_email, to_email, msg.as_string())
-            lock.acquire()
-            print("save_img子线程关闭")
-            lock.release()
-
-    def generate_email(self, infos, from_email, to_email):
-        from email.mime.multipart import MIMEMultipart
-        from email.mime.text import MIMEText
-        from email.mime.image import MIMEImage
-
-        html = """<html>
-                    <head>
-                    <style>
-                    /* 设置图片容器的样式 */
-                    .image-container {
-                            display: flex; /* 使用 flex 布局 */
-                            flex-wrap: wrap; /* 自动换行 */
-                            justify-content: center; /* 水平居中 */
-                    }
-
-                    /* 设置每张图片的样式 */
-                            .image-container img {
-                            width: [target_width]px; /* 设置图片宽度 */
-                            height: [target_width]px; /* 高度自适应 */
-                            margin: 5px; /* 图片间距 */
-                    }
-                    </style>
-                    </head>
-                    <body>
-                    <div class="image-container">""".replace(
-            "[target_width]", str(imgsz2)
-        )
-
-        msg = MIMEMultipart()
-        msg["From"] = from_email
-        msg["To"] = to_email
-        lock.acquire()
-        middle_dg = sorted(
-            sorted(detected_digits, reverse=True, key=lambda i: i[1])[:3],
-            key=lambda i: i[0],
-        )[1][0]
-        lock.release()
-        msg["Subject"] = (
-            f'中位数:{middle_dg} {datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}'
-        )
-        pic_inline = ""
-        for idx, (digit, img) in enumerate(infos):
-            # 改变图片尺寸
-            resized_img = cv2.resize(img, (imgsz2, imgsz2))
-            _, img_data = cv2.imencode(".jpg", resized_img)
-
-            # 添加图片附件
-            image = MIMEImage(img_data.tobytes())
-            image.add_header("Content-ID", f"<image{idx}.jpg>")
-            msg.attach(image)
-            tmp_pic_inline = f'<div><p>{digit}</p><img src="cid:image{idx}.jpg" alt="image{idx}.jpg"></div>'
-            pic_inline += tmp_pic_inline
-        html = html + pic_inline + "</div></body></html>"
-        content = MIMEText(html, "html", "utf-8")
-        msg.attach(content)
-        return msg
-
-
-def transit(queues1, queue2):
-    global flag
-    while flag:
-        for i in range(worker_num):
-            try:
-                frame = queues1[i].get(timeout=timeout)
-            except queue.Empty:
-                lock.acquire()
-                print("transit从detect获取帧超时")
-                lock.release()
-                continue
-            queue2.put(frame)
-
 
 class Show:
-    def __init__(self, queue1, queue2, mode):
-        self.queue1 = queue1
-        self.queue2 = queue2
+    def __init__(self, queues, mode):
+        self.queues = queues
         self.mode = mode
         self.frames_num = 0
 
     def show(self):
         time1 = time.time()
-        if self.mode == "imshow":
-            self.imshow()
-        elif self.mode in ("rtsp", "rtmp"):
-            self.push_live()
+        self.push_live()
         lock.acquire()
         print(f"total_fps:{self.frames_num / (time.time() - time1)}")
         print("show主线程关闭")
         lock.release()
-
-    def imshow(self):
-        # 主进程cv2.imshow窗口
-        cv2.namedWindow("0", cv2.WINDOW_AUTOSIZE)
-        fps = 0
-        frames_num = 0
-        fps_update_before = cv2.getTickCount()
-        show_flag = True
-
-        while show_flag:
-            try:
-                frame = self.queue1.get(timeout=timeout)
-            except queue.Empty:
-                break
-            frames_num += 1
-            self.frames_num += 1
-            frame = self.text(frame)  # 附上双位数检测次数及最终中位数
-            frame = self.update_fps(frame, fps)  # 附上fps
-            cv2.imshow("0", frame)
-            self.queue2.put(frame)  # 添加至视频保存队列
-
-            # fps计算
-            if frames_num > fps_per_frames:
-                fps = frames_num / (
-                    (cv2.getTickCount() - fps_update_before) / cv2.getTickFrequency()
-                )
-                frames_num = 0
-                fps_update_before = cv2.getTickCount()
-
-            # 检测到q，关闭窗口和所有进程
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                cv2.destroyAllWindows()
-                show_flag = False
 
     def push_live(self):
         if self.mode == "rtsp":
@@ -457,7 +363,7 @@ class Show:
         elif self.mode == "rtmp":
             live_format = "flv"
         elif self.mode == "srt":
-            live_format == "mpegts"
+            live_format = "mpegts"
         else:
             live_format = ""
             lock.acquire()
@@ -481,10 +387,14 @@ class Show:
             "-",
             "-c:v",
             "libx264",
-            "-pix_fmt",
-            "yuv420p",
             "-preset",
-            preset,
+            "medium",
+            "-pixel_format",
+            "yuv420p",
+            "-b:v",
+            bitrate,
+            "-rc_mode",
+            rc_mode,
             "-f",
             live_format,
             liveUrl,
@@ -492,77 +402,32 @@ class Show:
         with subprocess.Popen(command, stdin=subprocess.PIPE) as p:
             fps = 0
             frames_num = 0
-            fps_update_before = cv2.getTickCount()
+            fps_update_before = time.time()
             show_flag = True
 
             while show_flag:
-                try:
-                    frame = self.queue1.get(timeout=timeout)
-                    frame = cv2.resize(
-                        frame,
-                        (show_width, show_height),
-                        interpolation=cv2.INTER_NEAREST,
-                    )
-                except queue.Empty:
-                    break
-                frames_num += 1
-                self.frames_num += 1
-                frame = self.text(frame)  # 附上双位数检测次数及最终中位数
-                frame = self.update_fps(frame, fps)  # 附上fps
-                p.stdin.write(frame.tobytes())
-                self.queue2.put(frame)  # 添加至视频保存队列
+                for i in range(worker_num):
+                    try:
+                        frame = self.queues[i].get(timeout=timeout)
+                        frame = cv2.resize(
+                            frame,
+                            (show_width, show_height),
+                            interpolation=cv2.INTER_NEAREST,
+                        )
+                    except queue.Empty:
+                        show_flag = False
+                        break
+                    frames_num += 1
+                    self.frames_num += 1
+                    # frame = self.text(frame)  # 附上双位数检测次数及最终中位数
+                    frame = self.update_fps(frame, fps)  # 附上fps
+                    p.stdin.write(frame.tobytes())  # 写入ffmpeg
 
                 # fps计算
                 if frames_num > fps_per_frames:
-                    fps = frames_num / (
-                        (cv2.getTickCount() - fps_update_before)
-                        / cv2.getTickFrequency()
-                    )
+                    fps = frames_num / (time.time() - fps_update_before)
                     frames_num = 0
-                    fps_update_before = cv2.getTickCount()
-
-    def text(
-        self, img, font=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1.5, font_thickness=2
-    ):
-        # 右上角显示已检测双位数次数
-        lock.acquire()
-        dgs = sorted(detected_digits, reverse=True, key=lambda i: i[1])
-        lock.release()
-        width = img.shape[1]
-        for i, j in enumerate(dgs[:4]):
-            dg_text = f"{j[0]}:{j[1]}"
-            dg_text_width, dg_text_height = cv2.getTextSize(
-                dg_text, font, font_scale, font_thickness
-            )[0]
-            dg_text_x, dg_text_y = int(width - dg_text_width), int(
-                (i + 1) * dg_text_height * 2
-            )
-            cv2.putText(
-                img,
-                dg_text,
-                (dg_text_x, dg_text_y),
-                font,
-                font_scale,
-                (0, 0, 255),
-                font_thickness,
-            )
-
-        # 右上角显示已检测三个双位数的中位数
-        dg_text = str(sorted(dgs[:3], key=lambda i: i[0])[1][0])
-        dg_text_width, dg_text_height = cv2.getTextSize(
-            dg_text, font, font_scale, font_thickness
-        )[0]
-        dg_text_x, dg_text_y = int(width - dg_text_width), int(5 * dg_text_height * 2)
-        cv2.putText(
-            img,
-            dg_text,
-            (dg_text_x, dg_text_y),
-            font,
-            font_scale,
-            (0, 255, 0),
-            font_thickness,
-        )
-        return img
+                    fps_update_before = time.time()
 
     def update_fps(
         self, img, fps, font=cv2.FONT_HERSHEY_SIMPLEX, font_scale=1, font_thickness=2
@@ -582,31 +447,22 @@ class Show:
 
 def save_video(save_frame_queue):
     fourcc = cv2.VideoWriter.fourcc(*"XVID")
+    save_fps = live_fps // save_per_frames
     out = cv2.VideoWriter(
-        f"output/{now_time}/{time.time()}.avi",
+        f"./output/{now_time}/{time.time()}.avi",
         fourcc,
         save_fps,
-        (save_width, save_height),
+        (camera_width, camera_height),
     )
-    skip_frame_num = live_fps // save_fps
-    frame_id = -1
-    global save_flag
-    while save_flag:
-        frame_id += 1
+    while True:
         try:
             frame = save_frame_queue.get(timeout=timeout)
-            if frame_id % skip_frame_num != 0:
-                continue
-            frame = cv2.resize(
-                frame, (save_width, save_height), interpolation=cv2.INTER_NEAREST
-            )
             out.write(frame)
-            frame_id = 0
         except queue.Empty:
             break
     out.release()
 
-    with open(f"output/{now_time}/detected_num.txt", mode="w") as f:
+    with open(f"./output/{now_time}/detected_num.txt", mode="w") as f:
         lock.acquire()
         dgs = sorted(detected_digits, reverse=True, key=lambda i: i[1])
         lock.release()
@@ -616,28 +472,20 @@ def save_video(save_frame_queue):
 
 
 class Count:
-    def __init__(self, a, b, c, d, e, f):
-        self.queues1 = a
-        self.queues2 = b
-        self.queue3 = c
-        self.queue4 = d
-        self.queue5 = e
-        self.frequence = f
+    def __init__(self, frequence, queues=tuple(), queuess=tuple()):
+        self.frequence = frequence
+        self.queues = queues
+        self.queuess = queuess
 
     def count(self):
         global flag
         while flag:
             time.sleep(self.frequence)
-            nums = [self.count_queues(_) for _ in (self.queues1, self.queues2)]
-            nums.append(self.queue3.qsize())
-            nums.append(self.queue4.qsize())
-            nums.append(self.queue5.qsize())
             lock.acquire()
-            print("camera->detect", nums[0] / worker_num)
-            print("detect->transit", nums[1])
-            print("detect->save_img", nums[2])
-            print("transit->show", nums[3])
-            print("show->save_video", nums[4])
+            for name, queue in self.queues:
+                print(name, queue.qsize())
+            for name, queues in self.queuess:
+                print(name, self.count_queues(queues) / len(queues))
             print("\n")
             lock.release()
 
@@ -651,12 +499,11 @@ class Count:
 if __name__ == "__main__":
     # 创建保存文件夹
     now_time = cv2.getTickCount()
-    os.makedirs(f"output/{now_time}")
+    os.makedirs(f"./output/{now_time}")
 
     # 视频流队列
-    detect_queues = [queue.Queue(maxsize=maxsize) for i in range(worker_num)]
-    transit_queues = [queue.Queue() for i in range(worker_num)]
-    show_queue = queue.Queue()
+    detect_queues = [queue.Queue(maxsize=maxsize) for _ in range(worker_num)]
+    show_queues = [queue.Queue() for _ in range(worker_num)]
     save_img_queue = queue.Queue()
     save_video_queue = queue.Queue()
     # 检测结果储存处
@@ -666,28 +513,29 @@ if __name__ == "__main__":
     flag = True
     lock = threading.Lock()
     # camera线程
-    t1 = threading.Thread(target=camera, args=(detect_queues, cap_path))
+    t1 = threading.Thread(target=camera, args=(detect_queues, save_video_queue))
     # detect线程
     tasks1 = [
-        threading.Thread(target=Detect(detect_queues[idx], transit_queues[idx]).detect)
+        threading.Thread(target=Detect(detect_queues[idx], show_queues[idx]).detect)
         for idx in range(worker_num)
     ]
     # save_img线程
-    t3 = threading.Thread(target=SaveImg(save_img_queue).save, args=(save_img_mode,))
-    # transit线程
-    t2 = threading.Thread(target=transit, args=(transit_queues, show_queue))
+    t3 = threading.Thread(target=SaveImg(save_img_queue).save_disk, args=tuple())
     # save_video线程
     save_flag = True
     t4 = threading.Thread(target=save_video, args=(save_video_queue,))
     # count线程
     t5 = threading.Thread(
         target=Count(
-            detect_queues,
-            transit_queues,
-            save_img_queue,
-            show_queue,
-            save_video_queue,
             count_frequence,
+            (
+                ("save_img", save_img_queue),
+                ("save_video", save_video_queue),
+            ),
+            (
+                ("detect", detect_queues),
+                ("show", show_queues),
+            ),
         ).count
     )
 
@@ -696,12 +544,11 @@ if __name__ == "__main__":
     for i in tasks1:
         i.start()
     t3.start()
-    t2.start()
     t4.start()
     t5.start()
 
     # 主线程展示视频帧
-    Show(show_queue, save_video_queue, show_mode).show()
+    Show(show_queues, show_mode).show()
 
     # show线程结束后，关闭各个线程
     flag = False
@@ -714,11 +561,5 @@ if __name__ == "__main__":
     print("detect线程关闭")
     t3.join()
     print("save_img线程关闭")
-    t2.join()
-    print("transit线程关闭")
-    while True:
-        if save_video_queue.empty():
-            save_flag = False
-            t4.join()
-            print("save_video线程关闭")
-            break
+    t4.join()
+    print("save_video线程关闭")

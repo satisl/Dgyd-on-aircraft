@@ -1,17 +1,8 @@
-# encoding='UTF-8'
-# author: pureyang
-# TIME: 2019/8/22 下午5:15
-# Description:数据图片的重命名
-
-# 能实现文件的重命名,注意修改文件的路径
-
 import os
 import shutil
 
-img_path = r"D:\Double-digit-yolo-detection-on-aircraft\datasets\obb\background\images"
-save_img_path = (
-    r"D:\Double-digit-yolo-detection-on-aircraft\datasets\obb\background\images1"
-)
+img_path = r""
+save_img_path = r""
 os.makedirs(save_img_path, exist_ok=False)
 
 file_names = os.listdir(img_path)

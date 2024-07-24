@@ -3,7 +3,7 @@ from ultralytics.utils.plotting import Annotator
 
 if __name__ == '__main__':
     coefficient3 = 0.005
-    path = r'D:\Double-digit-yolo-detection-on-aircraft\datasets\5\for trainning\images\train\00000-0_1.jpg'
+    path = r''
     imgsz = 160
 
     img = cv2.imread(path, cv2.IMREAD_UNCHANGED)

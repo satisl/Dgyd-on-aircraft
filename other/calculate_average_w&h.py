@@ -2,9 +2,7 @@ import os
 from PIL import Image
 import math
 
-img_path = (
-    r"D:\Double-digit-yolo-detection-on-aircraft\datasets\5\for trainning\images\train"
-)
+img_path = ""
 imgs = os.listdir(img_path)
 
 width = 0

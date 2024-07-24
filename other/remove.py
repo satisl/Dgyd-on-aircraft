@@ -6,10 +6,10 @@ IMG_3539
 IMG_3531
 """
 
-img_path = r'D:\Double-digit-yolo-detection-on-aircraft\datasets\segment\origin2\images'
-xml_path = r'D:\Double-digit-yolo-detection-on-aircraft\datasets\segment\origin2\labels'
-save_img_path = r'D:\Double-digit-yolo-detection-on-aircraft\datasets\segment\origin1\images'
-save_xml_path = r'D:\Double-digit-yolo-detection-on-aircraft\datasets\segment\origin1\labels'
+img_path = r''
+xml_path = r''
+save_img_path = r''
+save_xml_path = r''
 
 remove_list = [i for i in remove_list.split('\n')]
 

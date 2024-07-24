@@ -4,8 +4,8 @@ import shutil
 import cv2
 import numpy as np
 
-org_path = r"D:\Double-digit-yolo-detection-on-aircraft\datasets\segment\origin"
-dst_path = r"D:\Double-digit-yolo-detection-on-aircraft\datasets\obb\origin"
+org_path = r""
+dst_path = r""
 img_path1 = f"{org_path}/images"
 img_path2 = f"{dst_path}/images"
 txt_path1 = f"{org_path}/labels"

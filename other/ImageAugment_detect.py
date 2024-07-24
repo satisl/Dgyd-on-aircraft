@@ -143,8 +143,8 @@ seq = iaa.Sequential(
     ],
 )
 
-org_path = r"D:\Double-digit-yolo-detection-on-aircraft\datasets\digits\splited"
-dst_path = r"D:\Double-digit-yolo-detection-on-aircraft\datasets\digits\for trainning"
+org_path = r""
+dst_path = r""
 os.makedirs(dst_path, exist_ok=False)
 
 aug_num = 5

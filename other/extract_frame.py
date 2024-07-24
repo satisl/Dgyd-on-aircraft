@@ -39,9 +39,9 @@ def extract_frames(video_path, output_folder):
 
 if __name__ == "__main__":
     # 视频文件路径
-    video_path = r"E:\desktop\新建文件夹\1715821238.7073598.avi"
+    video_path = r""
     # 输出文件夹路径
-    output_folder = r"E:\desktop\frame"
+    output_folder = r""
 
     # 提取帧
     extract_frames(video_path, output_folder)

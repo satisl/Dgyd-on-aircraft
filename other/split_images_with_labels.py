@@ -4,8 +4,8 @@ import shutil
 
 random.seed(42)
 
-org_path = r"D:\Double-digit-yolo-detection-on-aircraft\datasets\digits\origin1"
-dst_path = r"D:\Double-digit-yolo-detection-on-aircraft\datasets\digits\splited1"
+org_path = r""
+dst_path = r""
 
 train_proportion = 0.7
 val_proportion = 0.2

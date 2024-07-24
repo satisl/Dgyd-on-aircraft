@@ -113,10 +113,10 @@ def save(image_name, masks, clss, names):
 
 
 labels_path = (
-    r"D:\Double-digit-yolo-detection-on-aircraft\datasets\segment\origin1\json"
+    r"../datasets/segment/origin1/json"
 )
 images_path = (
-    r"D:\Double-digit-yolo-detection-on-aircraft\datasets\segment\origin1\images"
+    r"../datasets/segment/origin1/images"
 )
 os.makedirs(labels_path, exist_ok=False)
 show_width = 640
@@ -128,7 +128,7 @@ overrides = dict(
     task="segment",
     mode="predict",
     imgsz=1024,
-    model=r"D:\Double-digit-yolo-detection-on-aircraft\auto_labeling\other\mobile_sam.pt",
+    model=r"./other/mobile_sam.pt",
     verbose=False,
     save=False,
 )
@@ -136,13 +136,13 @@ predictor = SAMPredictor(overrides=overrides)
 print("sam部署完毕")
 
 # yolo
-detect_path = r"D:\Double-digit-yolo-detection-on-aircraft\yolov8\obb_480dataset_imgsz640_v8n_SGD\weights\best.pt"
+detect_path = r"../yolov8/obb_480dataset_imgsz640_v8n_SGD/weights/best.pt"
 yolo_model = YOLO(detect_path, task="detect")
 conf = 0.5
 iou = 0.5
 print("yolo部署完毕")
 
-# grounding dino
+# # grounding dino
 # GROUNDING_DINO_CONFIG_PATH = "other/GroundingDINO_SwinB_cfg.py"
 # GROUNDING_DINO_CHECKPOINT_PATH = "other/groundingdino_swinb_cogcoor.pth"
 

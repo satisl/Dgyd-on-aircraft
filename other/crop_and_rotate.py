@@ -4,13 +4,9 @@ import cv2
 import os
 
 coefficient1 = 1.2  # 靶子截取范围系数
-img_path1 = (
-    r"D:\Double-digit-yolo-detection-on-aircraft\datasets\obb\for trainning1\images\val"
-)
-txt_path1 = (
-    r"D:\Double-digit-yolo-detection-on-aircraft\datasets\obb\for trainning1\labels\val"
-)
-img_path2 = r"D:\Double-digit-yolo-detection-on-aircraft\datasets\obb\test\images"
+img_path1 = r""
+txt_path1 = r""
+img_path2 = r""
 
 
 def crop_and_rotate(xywhr, xyxy, image, width, height, scale=1.0):
